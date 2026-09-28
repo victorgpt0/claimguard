@@ -29,17 +29,19 @@ Diagram), so the OOAD-to-code mapping stays visible as the project develops:
 
 ```
 src/
-├── data/            # ClaimsPreprocessor + noise/fraud/code-switching injection (Table 3.1)
-├── detection/        # IsolationForestDetector, AutoencoderDetector
-├── explainability/    # SHAPExplainer
-├── classification/    # SemanticConsistencyClassifier + LoRA/PEFT fine-tuning
-├── icd11/             # ICD11APIClient
-├── narrative/          # AuditNarrativeGenerator (LLM, explanation-only)
-├── reporting/          # AuditReportGenerator, AuditReportRepository
-├── feedback/            # FeedbackRepository (FR-12), ClassifierRetrainer (FR-13/FR-14)
-├── auth/                # User entity, authenticate() (NFR-03)
-└── db/                  # SQLite schema (Figure 4.7) + seed script
-dashboard/app.py          # Streamlit entrypoint (IR-03)
+├── config.py          # loads config/config.yaml + .env
+├── data/              # ClaimsPreprocessor + noise/fraud/code-switching injection (Table 3.1)
+├── detection/         # IsolationForestDetector, AutoencoderDetector
+├── explainability/     # SHAPExplainer
+├── classification/     # SemanticConsistencyClassifier + LoRA/PEFT fine-tuning
+├── icd11/               # ICD11APIClient + ICD11Cache (see docs/environment.md) + refresh_cache CLI
+├── narrative/            # AuditNarrativeGenerator (LLM, explanation-only)
+├── reporting/            # AuditReportGenerator, AuditReportRepository
+├── feedback/              # FeedbackRepository (FR-12), ClassifierRetrainer (FR-13/FR-14)
+├── auth/                  # User entity, authenticate() (NFR-03, PBKDF2-hashed passwords)
+└── db/                    # SQLite schema (Figure 4.7) + seed script
+dashboard/app.py            # Streamlit entrypoint (IR-03)
+docker-compose.yml           # WHO ICD-11 API, self-hosted
 ```
 
 ## Setup
@@ -57,12 +59,20 @@ dashboard/app.py          # Streamlit entrypoint (IR-03)
    ```bash
    cp config/config.example.yaml config/config.yaml
    cp .env.example .env
-   # fill in .env: HF_TOKEN / OPENAI_API_KEY / ICD11_CLIENT_ID / ICD11_CLIENT_SECRET
+   # fill in .env: HF_TOKEN / OPENAI_API_KEY (no ICD-11 credentials needed — see step 3)
    ```
+
+3. **Start the WHO ICD-11 API (self-hosted, not the cloud API):**
+   ```bash
+   docker compose up -d
+   curl http://localhost:8081/icd/release/11/2026-01/mms  # sanity check it's up
+   ```
+   No OAuth2 credentials needed for a local deployment. See `docs/environment.md` for the
+   Colab-reachability caveat (Colab can't reach this container directly) before Sprint 3.
    `config.yaml` and `.env` are gitignored — never commit them. On Colab, prefer
    `google.colab.userdata` for secrets instead of `.env` (see `implementation_roadmap.md`).
 
-3. **Initialise the database:**
+4. **Initialise the database:**
    ```bash
    python -m src.db.seed --db-path /path/to/sha_fraud.sqlite
    ```
@@ -76,9 +86,23 @@ dashboard/app.py          # Streamlit entrypoint (IR-03)
 streamlit run dashboard/app.py
 ```
 
-Not yet functional end-to-end — see `tests/test_plan.md` and the Product Backlog
-(documentation repo, Section 3.4.1) for build order. Health-check/demo procedure will be
-documented here once the pipeline has something to demonstrate.
+Every module has a real implementation (not just stubs) — data preprocessing, both
+anomaly detectors, SHAP, the classifier/training loop, ICD-11 client + cache, the LLM
+narrative layer, the SQLite repository, feedback capture, and the retraining
+promotion gate. What's still missing before this is genuinely useful end-to-end: an
+actual synthetic dataset (Sprint 1) and a trained classifier checkpoint (Sprint 4+) —
+until then, `admin_view()` will correctly report "no trained checkpoint found" rather
+than fail. See `tests/test_plan.md` and the Product Backlog (documentation repo, Section
+3.4.1) for build order.
+
+**Before Sprint 3** (ICD-11 integration), refresh the local ICD-11 cache once against the
+running container rather than requiring live access on every claim:
+```bash
+docker compose up -d
+python -m src.icd11.refresh_cache --codes-file data/processed/icd11_codes_used.txt \
+    --cache-path artifacts/icd11_cache.json
+docker compose down
+```
 
 ## Testing
 
@@ -86,9 +110,18 @@ documented here once the pipeline has something to demonstrate.
 pytest tests/
 ```
 
+Tests mock anything that would otherwise need a GPU, a real model download, or a live
+external API (HF/OpenAI calls, the ICD-11 container, transformer weight loading) — they
+check *this project's* logic, not the correctness of the libraries it depends on.
 `tests/test_plan.md` tracks every functional/non-functional requirement (FR-XX/NFR-XX)
 against its test case, expected result, and actual result + evidence — the same format
 Chapter 5's Table 5.3 uses, kept live from the start rather than reconstructed later.
+
+## Deployment
+
+Free hosting on your own domain: see `docs/hosting_guide.md` for two options (Cloudflare
+Tunnel for a self-hosted demo, or Hugging Face Spaces + a Cloudflare Worker reverse proxy
+for something always-on) — both checked against current provider docs before writing.
 
 ## Development process
 

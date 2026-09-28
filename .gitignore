@@ -1,5 +1,6 @@
 venv/
-
+.wheel_cache/   # local dev-only cache for manually-resumed pip wheel downloads
+*.whl
 # secrets — never commit these (research_writing.txt 5.2.2/5.5: never expose API keys,
 # tokens, or credentials in the repository; rotate immediately if one is ever committed)
 .env

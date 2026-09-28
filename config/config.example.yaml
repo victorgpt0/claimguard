@@ -27,9 +27,11 @@ models:
   llm_model_name: null       # set once a specific open-weight model is selected (Gershon et al., 2025 benchmark)
 
 apis:
-  icd11_api_base_url: https://id.who.int/icd/release/11
-  # Client ID/secret come from environment variables (ICD11_CLIENT_ID, ICD11_CLIENT_SECRET),
-  # never from this file — see .env.example and docs/environment.md.
+  # Self-hosted WHO ICD-11 API (whoicd/icd-api Docker image — see docker-compose.yml),
+  # not the cloud API at icd.who.int. No OAuth2 credentials needed for a local
+  # deployment — that's only required against WHO's cloud-hosted instance. Port must
+  # match docker-compose.yml's host-side mapping.
+  icd11_api_base_url: http://localhost:8081
 
 training:
   # Section 3.2.4 dataset split (Table 3.1 / dataset-size justification)
