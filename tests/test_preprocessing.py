@@ -1,0 +1,51 @@
+import pytest
+
+from src.data.preprocessing import ClaimsPreprocessor
+
+
+def test_align_schema_raises_on_missing_column(sample_claims_df):
+    preprocessor = ClaimsPreprocessor()
+    incomplete = sample_claims_df.drop(columns=["clinical_notes"])
+    with pytest.raises(ValueError):
+        preprocessor.align_schema(incomplete)
+
+
+def test_align_schema_casts_types(sample_claims_df):
+    preprocessor = ClaimsPreprocessor()
+    aligned = preprocessor.align_schema(sample_claims_df)
+    assert str(aligned["service_date"].dtype).startswith("datetime64")
+    assert aligned["claim_amount"].dtype.kind == "f"
+
+
+def test_validate_quality_flags_bad_date_order(sample_claims_df):
+    preprocessor = ClaimsPreprocessor()
+    aligned = preprocessor.align_schema(sample_claims_df)
+    aligned.loc[0, "discharge_date"] = aligned.loc[0, "service_date"] - __import__("pandas").Timedelta(days=1)
+    validated = preprocessor.validate_quality(aligned)
+    assert validated.loc[0, "quality_flag_date_order"]
+    assert not validated.loc[1, "quality_flag_date_order"]
+
+
+def test_encode_features_adds_derived_columns(sample_claims_df):
+    preprocessor = ClaimsPreprocessor()
+    aligned = preprocessor.align_schema(sample_claims_df)
+    encoded = preprocessor.encode_features(aligned, fit=True)
+    assert "stay_days" in encoded.columns
+    assert "claim_amount_per_day" in encoded.columns
+    assert "code_frequency" in encoded.columns
+
+
+def test_split_dataset_respects_proportions_and_stratification(sample_claims_df):
+    preprocessor = ClaimsPreprocessor()
+    # duplicate rows so stratified split has enough samples per class
+    claims = __import__("pandas").concat([sample_claims_df] * 10, ignore_index=True)
+    splits = preprocessor.split_dataset(claims, train=0.6, val=0.2, test=0.2, seed=1)
+    total = sum(len(df) for df in splits.values())
+    assert total == len(claims)
+    assert set(splits.keys()) == {"train", "validation", "test"}
+
+
+def test_split_dataset_rejects_bad_proportions(sample_claims_df):
+    preprocessor = ClaimsPreprocessor()
+    with pytest.raises(ValueError):
+        preprocessor.split_dataset(sample_claims_df, train=0.5, val=0.3, test=0.3)
