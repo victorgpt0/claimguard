@@ -1,19 +1,25 @@
-# Pinned to versions available at setup time (2026-09). Once training/evaluation actually
-# runs on Colab, replace these with the versions Colab resolves (see docs/environment.md and
-# the implementation roadmap's Section 2a) — Chapter 5's rubric wants the *tested* versions,
-# not a guessed starting point.
-pandas==2.2.2
-numpy==1.26.4
-scikit-learn==1.5.1
-torch==2.4.0
-transformers==4.44.0
-peft==0.12.0
-shap==0.46.0
-streamlit==1.37.1
-requests==2.32.3
-huggingface_hub==0.24.6
-python-dotenv==1.0.1
+# Minimum versions, not exact pins: this local venv runs Python 3.13, and many exact
+# versions that would be reasonable Colab pins (Colab is typically Python 3.10/3.11)
+# don't have prebuilt wheels for 3.13 yet, forcing slow/fragile from-source builds.
+# Once training actually runs on Colab, capture the exact resolved versions there via
+# `pip freeze` (see docs/environment.md) and pin those for reproducibility — these
+# ranges are for local dev/testing only.
+pandas>=2.2.3
+pyarrow>=17.0.0   # parquet read/write support for pandas
+numpy>=2.0
+scikit-learn>=1.5.2
+torch>=2.5.0
+transformers>=4.45.0
+peft>=0.13.0
+shap>=0.46.0
+streamlit>=1.38.0
+requests>=2.32.3
+huggingface_hub>=0.25.0
+python-dotenv>=1.0.1
+openai>=1.40.0
+PyYAML>=6.0.2
+pytest>=8.3.2
+pytest-mock>=3.14.0
 
 # Not a pip package: Synthea (synthetic patient generator, Section 3.2.1) is a standalone Java
 # tool. Install separately per https://github.com/synthetichealth/synthea — not listed above.
-
