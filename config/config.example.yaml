@@ -19,9 +19,9 @@ thresholds:
   retrain_trigger_count: 50
 
 models:
-  # AfroXLM-R primary choice, XLM-RoBERTa-base fallback (Section 3.8.6 / 1.7 compute constraint)
-  classifier_base_model: Davlan/afro-xlmr-base
-  classifier_base_model_fallback: xlm-roberta-base
+  # Bio_ClinicalBERT primary choice, BERT-base fallback (Section 3.8.3 / 1.7 compute constraint)
+  classifier_base_model: emilyalsentzer/Bio_ClinicalBERT
+  classifier_base_model_fallback: bert-base-uncased
   # LLM provider for the explanation-only narrative layer (Section 3.8.7). Pick one.
   llm_provider: huggingface  # or: openai
   llm_model_name: null       # set once a specific open-weight model is selected (Gershon et al., 2025 benchmark)

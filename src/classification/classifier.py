@@ -1,6 +1,6 @@
 """SemanticConsistencyClassifier (FR-04; Section 3.6.1 Class Diagram). A fine-tuned
-multilingual transformer encoder (AfroXLM-R, or XLM-RoBERTa-base fallback — Conneau et
-al., 2020; Alabi et al., 2022) accepting the clinical notes string and billed ICD-11 code
+clinical transformer encoder (Bio_ClinicalBERT, or BERT-base fallback — Alsentzer et al.,
+2019; Devlin et al., 2019) accepting the clinical notes string and billed ICD-11 code
 definition, producing a binary consistency verdict with a confidence score, learned via
 transfer learning rather than rule application.
 
@@ -30,7 +30,7 @@ class ClassifierVerdict:
 
 
 class SemanticConsistencyClassifier:
-    def __init__(self, model_path: str, base_model_name: str = "xlm-roberta-base",
+    def __init__(self, model_path: str, base_model_name: str = "emilyalsentzer/Bio_ClinicalBERT",
                  device: str = "cpu"):
         """`model_path` points at a LoRA adapter checkpoint directory (see train.py),
         loaded on top of `base_model_name`. If `model_path` has no adapter yet (e.g. a

@@ -151,7 +151,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--train-file", required=True, help="JSONL: clinical_notes, icd11_definition, label")
     parser.add_argument("--val-file", required=True)
-    parser.add_argument("--base-model", default="xlm-roberta-base")
+    parser.add_argument("--base-model", default="emilyalsentzer/Bio_ClinicalBERT",
+                         help="Primary choice per config.yaml. There is no automatic "
+                              "fallback — pass --base-model bert-base-uncased explicitly "
+                              "if Bio_ClinicalBERT fails to load.")
     parser.add_argument("--experiments-dir", required=True)
     parser.add_argument("--seeds", nargs="+", type=int, default=[42, 123, 2024, 7, 31415])
     args = parser.parse_args()

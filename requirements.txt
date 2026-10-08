@@ -9,6 +9,12 @@ pyarrow>=17.0.0   # parquet read/write support for pandas
 numpy>=2.0
 scikit-learn>=1.5.2
 torch>=2.5.0
+# Local dev note: plain PyPI `torch` on Linux is the CUDA build and expects separate
+# nvidia-cu* runtime packages (large, and useless on a machine with no discrete GPU —
+# see docs/environment.md). Install the CPU-only build locally instead:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+# Colab already ships a CUDA-enabled torch matching its assigned runtime — don't
+# override it there.
 transformers>=4.45.0
 peft>=0.13.0
 shap>=0.46.0

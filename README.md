@@ -17,7 +17,7 @@ rule-based filters over structured billing fields, which can't check whether a c
 free-text clinical justification is semantically consistent with its billed ICD-11
 procedure code. ClaimGuard is a hybrid pipeline: unsupervised anomaly detection
 (Isolation Forest + Autoencoder) filters structured billing outliers; a fine-tuned
-multilingual transformer classifier (transfer learning, not a prompted LLM) predicts
+clinical transformer classifier (transfer learning, not a prompted LLM) predicts
 whether the flagged claim's clinical justification is consistent with its billed code; an
 LLM, invoked only for claims the classifier flags inconsistent, converts the verdict into
 a plain-language audit narrative grounded in the WHO ICD-11 API.
@@ -30,7 +30,7 @@ Diagram), so the OOAD-to-code mapping stays visible as the project develops:
 ```
 src/
 ├── config.py          # loads config/config.yaml + .env
-├── data/              # ClaimsPreprocessor + noise/fraud/code-switching injection (Table 3.1)
+├── data/              # ClaimsPreprocessor + fraud/text-noise injection (Table 3.1)
 ├── detection/         # IsolationForestDetector, AutoencoderDetector
 ├── explainability/     # SHAPExplainer
 ├── classification/     # SemanticConsistencyClassifier + LoRA/PEFT fine-tuning
@@ -117,11 +117,22 @@ check *this project's* logic, not the correctness of the libraries it depends on
 against its test case, expected result, and actual result + evidence — the same format
 Chapter 5's Table 5.3 uses, kept live from the start rather than reconstructed later.
 
+## Completion plan
+
+`docs/completion_plan.md` is the single reference for what's actually left before this
+implementation is done: what's trained and where (Colab vs. local), where every
+artifact is stored (Drive during development, Hugging Face Hub as the deployment
+hand-off), the deployed dashboard's own storage/persistence decision, an end-to-end
+data-flow diagram, and the remaining Sprint-by-Sprint checklist. Read this before
+starting Sprint 1.
+
 ## Deployment
 
 Free hosting on your own domain: see `docs/hosting_guide.md` for two options (Cloudflare
 Tunnel for a self-hosted demo, or Hugging Face Spaces + a Cloudflare Worker reverse proxy
 for something always-on) — both checked against current provider docs before writing.
+See `docs/completion_plan.md` §3c for a persistence caveat specific to the free-tier
+Spaces option that affects the feedback loop (FR-12/13/14).
 
 ## Development process
 

@@ -1,5 +1,6 @@
 venv/
-.wheel_cache/   # local dev-only cache for manually-resumed pip wheel downloads
+# local dev-only cache for manually-resumed pip wheel downloads
+.wheel_cache/
 *.whl
 # secrets — never commit these (research_writing.txt 5.2.2/5.5: never expose API keys,
 # tokens, or credentials in the repository; rotate immediately if one is ever committed)
@@ -8,8 +9,9 @@ config/config.yaml
 
 # data and model artifacts — these live in Google Drive, not git (DR-05: generated data and
 # model checkpoints belong in a designated artifacts directory, separate from the operational
-# database, not in version control)
-data/
+# database, not in version control). Anchored to the repo root so src/data/ (pipeline
+# code) is still tracked.
+/data/
 *.sqlite
 *.sqlite3
 models/
