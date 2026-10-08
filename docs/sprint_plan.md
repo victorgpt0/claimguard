@@ -1,0 +1,99 @@
+# Sprint Plan
+
+One-week sprints (Monday to Sunday), nested inside the course's three build-phase
+sprints from the lecturer's timetable. Each course sprint keeps its expectations; the
+weekly sprints split that work into reviewable increments, following Scrum for One
+(Section 3.3). Project end: first week of November 2026.
+
+Sprints 1–3 are reconstructed from evidence that already exists (git commits and file
+modification dates). They describe what was actually done in those weeks; nothing is
+backdated.
+
+| Course sprint | Weekly sprint | Dates |
+| --- | --- | --- |
+| I: Data Preparation and Environment Setup | 1, 2, 3 | 14 Sep – 4 Oct |
+| II: Core Functionality, Integration and Initial Testing | 4, 5 | 5 Oct – 18 Oct (progress review in Sprint 5) |
+| III: Approaching Completion and Hosting | 6, 7 | 19 Oct – 1 Nov |
+| Final documentation and presentation | 8 | 2 Nov – 7 Nov |
+
+---
+
+## Course Sprint I: Data Preparation and Environment Setup
+
+### Sprint 1 (14–20 Sep): Documentation corrections and design completion — Done
+- Chapter 3 patches for the feedback loop and Chapter 4 design notes finalised.
+- Documentation build scripts updated; conceptual framework figure redrawn.
+- **Evidence:** `proposal_revision/` files dated 13, 14, 17 and 20 Sep.
+
+### Sprint 2 (21–27 Sep): Repository and implementation plan — Done
+- `claimguard` repository created on GitHub; licence and initial structure.
+- `implementation_roadmap.md` written (environment, Drive layout, tracking).
+- Chapter 3 rigour improvements and Chapter 4 merged; documentation rebuilt.
+- **Evidence:** commits on 21 Sep; documentation build dated 24 Sep.
+
+### Sprint 3 (28 Sep – 4 Oct): Environment and core modules — Done
+- Development environment, configuration and secrets handling (`.env.example`, `config.example.yaml`).
+- Self-hosted WHO ICD-11 API (Docker) and ICD-11 client with cache.
+- All pipeline classes implemented: preprocessing, fraud injection, Isolation Forest,
+  Autoencoder, SHAP, classifier and training loop, narrative generator, report
+  repository, feedback repository and retrainer, authentication, dashboard.
+- 58 unit tests, passing.
+- **Evidence:** 7 commits on 28 Sep.
+- **Carried over:** no dataset was prepared in Course Sprint I. It moves to Sprint 4.
+
+## Course Sprint II: Core Functionality, Integration and Initial Testing
+
+### Sprint 4 (5–11 Oct): Scope change and data preparation — In progress
+- [x] English-only scope approved; code-switching replaced by text-noise injection; classifier switched to Bio_ClinicalBERT (60 tests passing).
+- [x] `.gitignore` fixed so `src/data/` is version-controlled.
+- [x] Chapters 1–4 condensed and converted to past tense.
+- [ ] Commit and push all of the above.
+- [ ] Choose the base claims dataset (DE-SynPUF and Synthea) and document its source and preparation.
+- [ ] Dataset generation script: Table 3.1 injections at documented rates, text noise, 60/20/20 split plus the Deployment/Demonstration Pool. First version may be smaller than 20,000 claims.
+- [ ] Missing-value and numeric-perturbation noise for structured fields (described in 3.2.2, not yet implemented).
+- [ ] Isolation Forest baseline trained, with validation precision, recall and F1.
+
+### Sprint 5 (12–18 Oct): Working core workflow — Progress review
+- [ ] Orchestration script: claims batch → preprocessing → Isolation Forest and Autoencoder → SHAP → classifier → ICD-11 lookup → LLM narrative → report saved to SQLite.
+- [ ] Fill the ICD-11 cache for every code in the dataset.
+- [ ] Choose the LLM provider and model; run the narrative layer on real flagged claims.
+- [ ] Single-seed classifier fine-tune on Colab, enough to run the core workflow.
+- [ ] Dashboard shows generated reports; auditor can record a decision.
+- [ ] Test records in `tests/test_plan.md`: expected result, actual result, correction (valid input, invalid input and failure cases).
+- [ ] Chapter 5 started: environment, implemented modules, initial results.
+- [ ] Prepare the review: demo, test evidence, one AI suggestion checked (from `docs/ai_use_log.md`).
+
+## Course Sprint III: Approaching Completion and Hosting
+
+### Sprint 6 (19–25 Oct): Full training and feedback loop
+- [ ] Full dataset (about 20,000 claims), regenerated if Sprint 4 used a smaller one.
+- [ ] Autoencoder threshold and Isolation Forest contamination tuned on the validation split; values recorded.
+- [ ] Classifier fine-tuned with all 5 seeds on Colab; evidence saved per run in Drive.
+- [ ] Rule-based baseline and structured-only baseline implemented.
+- [ ] Feedback loop demonstrated once: decisions → Feedback Dataset → retraining → promotion check.
+- [ ] Deployment requirements identified; hosting option chosen from `docs/hosting_guide.md`.
+
+### Sprint 7 (26 Oct – 1 Nov): Evaluation and hosting
+- [ ] Held-out evaluation against all four baselines: McNemar's test, bootstrap confidence intervals, mean and standard deviation over 5 seeds.
+- [ ] Stratified results: clean versus noisy text, common versus rare ICD-11 codes.
+- [ ] Cost summary table (fraud value flagged, auditor-hours).
+- [ ] Automated faithfulness check script: a narrative passes only if it names the billed code's official ICD-11 title and refers to specific content from the claim's clinical notes. Run on every report.
+- [ ] Researcher scores 50 random reports on the five-criterion Likert rubric (single-rater; no Krippendorff's alpha).
+- [ ] SHAP coherence check on 100 flagged claims.
+- [ ] Project deployed online and the tested setup recorded in `docs/environment.md`.
+
+## Final
+
+### Sprint 8 (2–7 Nov): Documentation and presentation
+- [ ] Chapter 5 completed with verified results; Chapter 6 written.
+- [ ] Chapters 3 and 4 updated from planned to completed wording with actual numbers.
+- [ ] Abstract revised last; Gantt chart appendix redrawn to this plan.
+- [ ] AI-use declaration distilled from the log.
+- [ ] Final release tagged (`v1.0`); presentation prepared.
+
+---
+
+## Working rules
+- Tag the end of each sprint that produces a working increment (`v0.4-data`, `v0.5-core`, …). Never backdate tags or commits.
+- Reference the GitHub issue in commits (`closes #12`).
+- Keep `tests/test_plan.md` and `docs/ai_use_log.md` updated as work happens.

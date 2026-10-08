@@ -35,7 +35,8 @@ class AuditNarrativeGenerator:
     def generate(self, clinical_notes: str, verdict, icd11_definition: str) -> str:
         """Builds the structured prompt (clinical notes + verdict + ICD-11 definition)
         and returns the LLM's plain-language narrative. Prompt template developed
-        iteratively across sprints (Section 3.2.3) based on domain-reviewer feedback."""
+        iteratively across sprints (Section 3.2.3) based on the researcher's review of output
+        quality."""
         if verdict.verdict != "inconsistent":
             raise ValueError(
                 "AuditNarrativeGenerator must only be invoked for inconsistent verdicts "
