@@ -1,12 +1,13 @@
 import pandas as pd
 
 from src.data.noise_injection import (
+    apply_text_noise,
     inject_anomalous_dependent_counts,
-    inject_code_switching,
     inject_ghost_billing,
     inject_inflated_caesarean_rate,
     inject_outpatient_to_inpatient_conversion,
     inject_record_fabrication,
+    inject_text_noise,
     inject_upcoding,
 )
 
@@ -78,21 +79,38 @@ def test_inject_anomalous_dependent_counts():
         assert row["dependent_count"] > realistic_max[row["facility_type"]]
 
 
-def test_inject_code_switching_replaces_known_terms():
+def test_inject_text_noise_abbreviates_known_terms():
+    text = "Patient complains of shortness of breath with fever."
+    result = inject_text_noise(text, rate=1.0, seed=1,
+                               abbreviations={"patient": "pt", "complains of": "c/o",
+                                              "shortness of breath": "SOB", "with": "w/"})
+    lowered = result.lower()
+    assert "c/o" in lowered
+    assert "sob" in lowered
+    assert "shortness" not in lowered
+
+
+def test_inject_text_noise_zero_rate_is_noop():
     text = "Patient reported severe pain and fever."
-    result = inject_code_switching(text, substitution_rate=1.0, seed=1)
-    assert "mgonjwa" in result.lower()
-    assert "maumivu" in result.lower()
-    assert "homa" in result.lower()
+    assert inject_text_noise(text, rate=0.0, seed=1) == text
 
 
-def test_inject_code_switching_zero_rate_is_noop():
-    text = "Patient reported severe pain and fever."
-    result = inject_code_switching(text, substitution_rate=0.0, seed=1)
-    assert result == text
+def test_inject_text_noise_is_reproducible():
+    text = "Patient admitted with abdominal pain and high temperature."
+    assert inject_text_noise(text, rate=0.5, seed=7) == inject_text_noise(text, rate=0.5, seed=7)
 
 
-def test_inject_code_switching_preserves_unknown_words():
-    text = "The xylophone remained untouched."
-    result = inject_code_switching(text, substitution_rate=1.0, seed=1)
-    assert result == text
+def test_inject_text_noise_typos_without_abbreviations():
+    text = "Severe headache persisting overnight"
+    result = inject_text_noise(text, rate=1.0, seed=3, abbreviations={})
+    assert result != text
+    assert result.lower() != text.lower()
+
+
+def test_apply_text_noise_flags_exact_fraction(sample_claims_df):
+    result = apply_text_noise(sample_claims_df, fraction=0.5, rate=1.0, seed=1)
+    assert result["has_text_noise"].sum() == len(sample_claims_df) // 2
+    clean = result[~result["has_text_noise"]]
+    original = sample_claims_df.set_index("claim_id")["clinical_notes"]
+    for _, row in clean.iterrows():
+        assert row["clinical_notes"] == original[row["claim_id"]]
