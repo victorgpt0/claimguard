@@ -1,8 +1,7 @@
 # ClaimGuard
 
 LLM-Assisted Anomaly Detection for Post-Payment Fraud Audit: A Case Study of Kenya's
-Social Health Authority — final-year project implementation (ICS Project II, Strathmore
-University). Gichuru Victor Kimotho (167026), ICS 4B — Supervisor: Mr. Tiberius Tabulu.
+Social Health Authority
 
 Full research documentation (Chapters 1–4, methodology, system design) lives in the
 project's separate documentation repository, not here — this repo is the implementation
