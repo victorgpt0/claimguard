@@ -20,6 +20,7 @@ models/
 *.safetensors
 checkpoints/
 experiments/
+artifacts/
 
 # notebook/Python noise
 .ipynb_checkpoints/

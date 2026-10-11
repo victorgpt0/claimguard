@@ -57,7 +57,7 @@ backdated.
 
 ### Sprint 5 (12–18 Oct): Working core workflow — Progress review
 - [ ] Orchestration script: claims batch → preprocessing → Isolation Forest and Autoencoder → SHAP → classifier → ICD-11 lookup → LLM narrative → report saved to SQLite.
-- [ ] Fill the ICD-11 cache for every code in the dataset.
+- [x] Fill the ICD-11 cache for every code in the dataset (12 Oct): 38 codes in `artifacts/icd11_cache.json`; residual categories inherit their parent's definition (TC-024).
 - [ ] Choose the LLM provider and model; run the narrative layer on real flagged claims.
 - [ ] Single-seed classifier fine-tune on Colab, enough to run the core workflow.
 - [ ] Dashboard shows generated reports; auditor can record a decision.

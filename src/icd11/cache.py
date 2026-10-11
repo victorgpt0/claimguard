@@ -48,6 +48,7 @@ class ICD11Cache:
                 "definition": d.definition,
                 "inclusion": d.inclusion,
                 "exclusion": d.exclusion,
+                "definition_source": d.definition_source,
             }
             for code, d in self._entries.items()
         }

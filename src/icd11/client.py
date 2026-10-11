@@ -36,6 +36,9 @@ class ICD11Definition:
     definition: str
     inclusion: list[str]
     exclusion: list[str]
+    # Code (or title, for a block without one) of the ancestor the definition was taken
+    # from; empty when the code has its own definition.
+    definition_source: str = ""
 
 
 class ICD11APIClient:
@@ -89,15 +92,41 @@ class ICD11APIClient:
         # from the local container; fetching it as-is goes to WHO's cloud and fails with
         # 401. Re-point the URI at base_url so the lookup stays on the local container.
         entity = self._get(self.base_url + urlsplit(stem_id).path)
+        definition, source = self._inherited_definition(entity)
         return ICD11Definition(
             code=icd11_code,
             title=_extract_label(entity.get("title")),
-            definition=_extract_label(entity.get("definition")),
+            definition=definition,
+            definition_source=source,
             # Inclusion/exclusion items are {"label": {"@value": ...}, ...references}; the
             # label is the human-readable criterion, the references are URIs.
             inclusion=[_extract_label(i.get("label")) for i in entity.get("inclusion", [])],
             exclusion=[_extract_label(e.get("label")) for e in entity.get("exclusion", [])],
         )
+
+
+    def _inherited_definition(self, entity: dict, max_levels: int = 3) -> tuple[str, str]:
+        """Residual categories (".Z unspecified", ".Y other specified") and many leaf
+        codes carry no definition of their own: ICD-11 defines the parent category
+        instead. Walks up the parent chain (categories and blocks, never a chapter) to the
+        nearest definition, returning it with the ancestor's code or block title, or
+        ("", "") if none is found within `max_levels`."""
+        definition = _extract_label(entity.get("definition"))
+        if definition:
+            return definition, ""
+        for _ in range(max_levels):
+            parents = entity.get("parent") or []
+            if not parents:
+                break
+            entity = self._get(self.base_url + urlsplit(parents[0]).path)
+            # A chapter's definition ("This chapter includes...") says nothing about the
+            # condition, so the walk stops below chapter level.
+            if entity.get("classKind") == "chapter":
+                break
+            definition = _extract_label(entity.get("definition"))
+            if definition:
+                return definition, entity.get("code") or _extract_label(entity.get("title"))
+        return "", ""
 
 
 def _extract_label(value) -> str:
