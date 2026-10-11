@@ -19,6 +19,11 @@ def sample_claims_df() -> pd.DataFrame:
             "Emergency admission following injury.",
         ],
         "claim_type": ["outpatient", "outpatient", "outpatient", "inpatient"],
+        "member_id": ["M1", "M1", "M2", "M3"],
+        "beneficiary_type": ["principal", "dependent", "principal", "dependent"],
+        "patient_age": [34, 8, 51, 27],
+        "patient_sex": ["female", "male", "male", "female"],
+        "facility_level": [3, 3, 4, 4],
         "is_fraud": [0, 0, 1, 1],
     })
 

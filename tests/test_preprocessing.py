@@ -1,6 +1,7 @@
+import pandas as pd
 import pytest
 
-from src.data.preprocessing import ClaimsPreprocessor
+from src.data.preprocessing import FEATURE_COLUMNS, ClaimsPreprocessor
 
 
 def test_align_schema_raises_on_missing_column(sample_claims_df):
@@ -33,6 +34,37 @@ def test_encode_features_adds_derived_columns(sample_claims_df):
     assert "stay_days" in encoded.columns
     assert "claim_amount_per_day" in encoded.columns
     assert "code_frequency" in encoded.columns
+
+
+def test_feature_matrix_has_fixed_columns_across_splits(sample_claims_df):
+    preprocessor = ClaimsPreprocessor()
+    aligned = preprocessor.align_schema(sample_claims_df)
+    train = preprocessor.feature_matrix(aligned.iloc[:3], fit=True)
+    # The held-out batch has a provider and a code never seen in training.
+    held_out = aligned.iloc[3:].assign(provider_id="P9", icd11_code="9Z99")
+    scored = preprocessor.feature_matrix(held_out)
+    assert train.shape[1] == scored.shape[1] == len(FEATURE_COLUMNS)
+    assert not pd.isna(scored).any()
+
+
+def test_encode_features_requires_fit_on_training_first(sample_claims_df):
+    preprocessor = ClaimsPreprocessor()
+    aligned = preprocessor.align_schema(sample_claims_df)
+    with pytest.raises(RuntimeError):
+        preprocessor.encode_features(aligned)
+
+
+def test_history_features_count_member_claims_and_caesarean_share(sample_claims_df):
+    preprocessor = ClaimsPreprocessor()
+    claims = preprocessor.align_schema(sample_claims_df)
+    claims["icd11_code"] = ["JB22.1", "JB22.1", "JB20.0", "JB22.1"]
+    claims["provider_id"] = ["P1", "P1", "P2", "P2"]
+    preprocessor.encode_features(claims.iloc[:2], fit=True)
+    scaled = preprocessor.encode_features(claims.iloc[2:])[FEATURE_COLUMNS]
+    raw = preprocessor._scaler.inverse_transform(scaled)
+    row = dict(zip(FEATURE_COLUMNS, raw[1]))  # claim 4: P2 caesarean, member M3
+    assert row["member_claim_count"] == 1
+    assert row["provider_caesarean_share"] == 0.5  # P2: one caesarean in two deliveries
 
 
 def test_split_dataset_respects_proportions_and_stratification(sample_claims_df):

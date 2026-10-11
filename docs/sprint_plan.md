@@ -37,7 +37,7 @@ backdated.
 - All pipeline classes implemented: preprocessing, fraud injection, Isolation Forest,
   Autoencoder, SHAP, classifier and training loop, narrative generator, report
   repository, feedback repository and retrainer, authentication, dashboard.
-- 58 unit tests, passing.
+- 58 unit tests, passing (74 after Sprint 4).
 - **Evidence:** 7 commits on 28 Sep.
 - **Carried over:** no dataset was prepared in Course Sprint I. It moves to Sprint 4.
 
@@ -50,9 +50,10 @@ backdated.
 - [x] Commit and push all of the above.
 - [x] Base claims source decided (11 Oct): a custom generator over a catalogue of 37 ICD-11 codes priced from LN 56/2025, replacing DE-SynPUF/Synthea. Synthea's case mix is US-specific (no malaria), it codes in SNOMED, and neither source has ICD-11 codes or clinical free text. Chapter 3 Section 3.2.1 wording must be updated to match.
 - [x] Dataset generation code (11 Oct): stages A-C (`src/data/generator.py`, `note_synthesis.py`, `build_dataset.py`) plus `notebooks/01_generate_dataset.ipynb`. All six Table 3.1 typologies, 10% prevalence, 30% text noise, DR-08 pool, then 60/20/20; `is_fraud` now produced. Tested end to end with a fake LLM (74 tests).
-- [ ] Run the notebook on Colab (5,000 claims, Qwen2.5-7B notes), read a sample of the notes, log the review in `docs/ai_use_log.md`.
+- [x] Run the notebook on Colab (11 Oct): 5,000 claims, Qwen2.5-7B notes (0 rejected), splits 2,700 / 900 / 900 / 500, ~10% fraud. Fixed a vLLM out-of-memory crash on the T4 along the way. Dataset on Drive, documented in `docs/data_generation.md`, tagged `v0.4-data`.
+- [ ] Log the notes review in `docs/ai_use_log.md` (student's own entry).
 - [ ] Missing-value and numeric-perturbation noise for structured fields (described in 3.2.2, not yet implemented).
-- [ ] Isolation Forest baseline trained, with validation precision, recall and F1.
+- [x] Isolation Forest baseline (12 Oct): validation precision 0.47, recall 0.55, F1 0.51 (contamination 0.10). Catches conversion and fictitious dependents fully; misses ghost billing and fabrication, as designed (TC-022).
 
 ### Sprint 5 (12–18 Oct): Working core workflow — Progress review
 - [ ] Orchestration script: claims batch → preprocessing → Isolation Forest and Autoencoder → SHAP → classifier → ICD-11 lookup → LLM narrative → report saved to SQLite.
