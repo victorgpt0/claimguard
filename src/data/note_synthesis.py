@@ -187,11 +187,14 @@ def synthesise(prompts: list[list[dict]], seeds: list[int], generate: Generate, 
 
 def vllm_generator(model: str, temperature: float = 0.8, max_tokens: int = 200) -> Generate:
     """Batched generation with vLLM. Imported lazily: vLLM is installed only on Colab.
-    float16 because the T4 has no bfloat16 support."""
+    float16 because the T4 has no bfloat16 support. On the 15 GB T4 the default 8,192-token
+    prefill chunk ran out of memory in the MLP; prompts are ~150 tokens, so a 2,048-token
+    chunk loses little throughput. Quantization is left to vLLM, which picks the faster
+    awq_marlin kernel for AWQ checkpoints when the GPU supports it."""
     from vllm import LLM, SamplingParams
 
-    llm = LLM(model=model, dtype="half", max_model_len=1024, gpu_memory_utilization=0.9,
-              quantization="awq" if "awq" in model.lower() else None)
+    llm = LLM(model=model, dtype="half", max_model_len=1024, gpu_memory_utilization=0.85,
+              max_num_batched_tokens=2048, max_num_seqs=128)
 
     def generate(prompts: list[list[dict]], seeds: list[int]) -> list[str]:
         params = [SamplingParams(temperature=temperature, top_p=0.95, max_tokens=max_tokens, seed=s)

@@ -268,7 +268,7 @@ def generate_base_claims(catalogue: dict, config: GeneratorConfig) -> tuple[pd.D
 
     claims = pd.concat([base, pd.DataFrame(caesarean + dependents + top_up)], ignore_index=True)
     for flag in ("is_inflated_csection", "is_anomalous_dependent"):
-        claims[flag] = claims.get(flag, pd.Series(False, index=claims.index)).fillna(False).astype(bool)
+        claims[flag] = claims.get(flag, pd.Series(False, index=claims.index)).eq(True)
     claims = claims.sample(frac=1.0, random_state=config.seed).reset_index(drop=True)
     claims.insert(0, "claim_id", [f"CLM{i:06d}" for i in range(1, len(claims) + 1)])
     return claims, providers
