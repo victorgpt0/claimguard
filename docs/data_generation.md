@@ -241,6 +241,13 @@ Generated with seed 42 on a Tesla T4 (15 GB), Python 3.13. The exact commit is i
 Every typology has 44–45 claims in train, 14–15 in validation and test, and 8–9 in the
 pool.
 
+### v0.5-5k (built 2026-10-12)
+
+Stage C rerun locally from v0.4's raw files at commit `1420fb1`, adding the structured-field
+noise (§5.6). The claims, labels, amounts and notes are identical to v0.4; the only change
+is 270 / 90 / 90 / 50 claims with a structured defect in train / validation / test / pool.
+**v0.5-5k is the current dataset.**
+
 ## 8. Known limitations (to address in a later version)
 
 1. **The boilerplate notes are near-duplicates.** Most are variations on "Patient
