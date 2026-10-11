@@ -56,9 +56,16 @@ class AuditNarrativeGenerator:
     def _generate_huggingface(self, prompt: str) -> str:
         from huggingface_hub import InferenceClient
 
+        # Chat API rather than text_generation: most models served by Hugging Face's
+        # inference providers expose only the "conversational" task, and chat_completion
+        # applies the model's own chat template.
         client = InferenceClient(model=self.model_name, token=os.environ.get("HF_TOKEN"))
-        response = client.text_generation(prompt, max_new_tokens=200, temperature=0.3)
-        return response.strip()
+        response = client.chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=200,
+            temperature=0.3,
+        )
+        return response.choices[0].message.content.strip()
 
     def _generate_openai(self, prompt: str) -> str:
         from openai import OpenAI

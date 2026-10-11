@@ -56,10 +56,10 @@ backdated.
 - [x] Isolation Forest baseline (12 Oct): validation precision 0.47, recall 0.55, F1 0.51 (contamination 0.10). Catches conversion and fictitious dependents fully; misses ghost billing and fabrication, as designed (TC-022).
 
 ### Sprint 5 (12–18 Oct): Working core workflow — Progress review
-- [ ] Orchestration script: claims batch → preprocessing → Isolation Forest and Autoencoder → SHAP → classifier → ICD-11 lookup → LLM narrative → report saved to SQLite.
+- [ ] Orchestration script: claims batch → preprocessing → Isolation Forest and Autoencoder → SHAP → classifier → ICD-11 lookup → LLM narrative → report saved to SQLite. (12 Oct: `src/pipeline.py` built and wiring-tested on the 500-claim pool with a stand-in classifier, 19 s on CPU, 44 reports the dashboard reads (TC-025). Waits on the trained classifier and an LLM model choice.)
 - [x] Fill the ICD-11 cache for every code in the dataset (12 Oct): 38 codes in `artifacts/icd11_cache.json`; residual categories inherit their parent's definition (TC-024).
-- [ ] Choose the LLM provider and model; run the narrative layer on real flagged claims.
-- [ ] Single-seed classifier fine-tune on Colab, enough to run the core workflow.
+- [ ] Choose the LLM provider and model; run the narrative layer on real flagged claims. (12 Oct: provider Hugging Face Inference; generator moved to the chat API. Model not chosen: the Gershon et al. (2025) full text could not be fetched to confirm which model it supports.)
+- [ ] Single-seed classifier fine-tune on Colab, enough to run the core workflow. (12 Oct: export script, `train.py` fixes (GPU, best-checkpoint metrics, class-weighted loss, per-batch padding) and `notebooks/02_train_classifier.ipynb` ready; run pending.)
 - [ ] Dashboard shows generated reports; auditor can record a decision.
 - [ ] Test records in `tests/test_plan.md`: expected result, actual result, correction (valid input, invalid input and failure cases).
 - [ ] Chapter 5 started: environment, implemented modules, initial results.
@@ -94,6 +94,27 @@ backdated.
 - [ ] Final release tagged (`v1.0`); presentation prepared.
 
 ---
+
+## Later improvements (deferred, not in the current scope)
+
+Recorded so they are not lost; the original funnel design stays for now.
+
+- **Stage-1 text-mismatch screen** (12 Oct finding). In the funnel, the classifier only sees
+  claims the anomaly detectors flag, and Isolation Forest flags 0-1 of 15 ghost-billing and
+  record-fabrication claims (their fraud is only in the note). Prototype: flag a claim in
+  stage 1 if the detectors flag it OR its note has zero TF-IDF word overlap with its code's
+  reference text. Validation: ghost billing passed to the classifier 0% -> 80%, fabrication
+  0% -> 100%, stage-1 recall 0.36 -> 0.67, 175 of 900 claims passed on (14% of clean
+  claims). Limits: crude word overlap (12% of clean notes also score 0); a clinical
+  sentence-embedding similarity would separate better. Needs Chapter 3/4 wording (a
+  "text-consistency screen" box in stage 1).
+- **Tune Isolation Forest for recall, not F1.** As the first stage of a funnel it should be
+  generous; F1 tuning picks contamination 0.05, which lets inflated caesarean and most
+  upcoding through. The autoencoder already uses a recall floor (NFR-05); apply the same.
+- **Random audit sample** of unflagged claims (e.g. 2%) sent to the classifier anyway, to
+  measure what the funnel misses.
+- Until then, Chapter 5 must state the funnel's limitation with the numbers: text-only
+  typologies are mostly lost at stage 1 (also noted in `docs/completion_plan.md`).
 
 ## Working rules
 - Tag the end of each sprint that produces a working increment (`v0.4-data`, `v0.5-core`, …). Never backdate tags or commits.

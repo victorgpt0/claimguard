@@ -22,13 +22,13 @@ def test_generate_huggingface_provider_builds_prompt_and_calls_client():
 
     with patch("huggingface_hub.InferenceClient") as MockClient:
         instance = MockClient.return_value
-        instance.text_generation.return_value = "  This is the narrative.  "
+        instance.chat_completion.return_value.choices = [
+            MagicMock(message=MagicMock(content="  This is the narrative.  "))]
 
         result = generator.generate("Patient had fever.", _FakeVerdict("inconsistent"), "Definition X")
 
     assert result == "This is the narrative."
-    call_args = instance.text_generation.call_args
-    prompt = call_args.args[0]
+    prompt = instance.chat_completion.call_args.kwargs["messages"][0]["content"]
     assert "Definition X" in prompt
     assert "Patient had fever." in prompt
 

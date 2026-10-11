@@ -3,11 +3,11 @@
 # 3.2.3) produces real numbers; FR-10 reads this file at startup, not a live dashboard control.
 
 paths:
-  data_dir: /content/drive/MyDrive/SHA_Fraud_Audit/data
-  model_dir: /content/drive/MyDrive/SHA_Fraud_Audit/models
-  artifacts_dir: /content/drive/MyDrive/SHA_Fraud_Audit/artifacts
-  experiments_dir: /content/drive/MyDrive/SHA_Fraud_Audit/experiments
-  db_path: /content/drive/MyDrive/SHA_Fraud_Audit/db/sha_fraud.sqlite
+  data_dir: /content/drive/MyDrive/claimguard/data
+  model_dir: /content/drive/MyDrive/claimguard/models
+  artifacts_dir: /content/drive/MyDrive/claimguard/artifacts
+  experiments_dir: /content/drive/MyDrive/claimguard/experiments
+  db_path: /content/drive/MyDrive/claimguard/db/sha_fraud.sqlite
 
 thresholds:
   # Isolation Forest / Autoencoder anomaly score threshold (FR-02). Not yet tuned.
