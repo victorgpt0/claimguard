@@ -18,16 +18,25 @@ class _FakeResponse:
 
 
 def test_get_code_definition_happy_path(monkeypatch):
+    # Response shapes captured from the live whoicd/icd-api container (release 2026-01):
+    # stemId is a canonical id.who.int URI, and inclusion/exclusion items wrap their text
+    # in a "label" object alongside reference URIs.
     client = ICD11APIClient(base_url="http://localhost:8081", release="2026-01")
+    requested_urls = []
 
     def fake_get(url, headers=None, timeout=None):
+        requested_urls.append(url)
         if "codeinfo" in url:
-            return _FakeResponse({"stemId": "http://localhost:8081/icd/entity/12345"})
+            return _FakeResponse({"stemId": "http://id.who.int/icd/release/11/2026-01/mms/12345"})
         return _FakeResponse({
-            "title": {"@value": "Some Condition"},
-            "definition": {"@value": "A description of the condition."},
-            "inclusion": [{"@value": "related term"}],
-            "exclusion": [],
+            "title": {"@language": "en", "@value": "Some Condition"},
+            "definition": {"@language": "en", "@value": "A description of the condition."},
+            "inclusion": [{"label": {"@language": "en", "@value": "related term"}}],
+            "exclusion": [{
+                "label": {"@language": "en", "@value": "Excluded condition"},
+                "foundationReference": "http://id.who.int/icd/entity/999",
+                "linearizationReference": "http://id.who.int/icd/release/11/2026-01/mms/999",
+            }],
         })
 
     monkeypatch.setattr(requests, "get", fake_get)
@@ -35,6 +44,9 @@ def test_get_code_definition_happy_path(monkeypatch):
     assert result.title == "Some Condition"
     assert result.definition == "A description of the condition."
     assert result.inclusion == ["related term"]
+    assert result.exclusion == ["Excluded condition"]
+    # The entity fetch must stay on the local container, never go to WHO's cloud API.
+    assert requested_urls[1] == "http://localhost:8081/icd/release/11/2026-01/mms/12345"
 
 
 def test_get_code_definition_raises_after_retries(monkeypatch):

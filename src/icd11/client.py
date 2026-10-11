@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import requests
 
@@ -85,14 +85,18 @@ class ICD11APIClient:
         if not stem_id:
             raise ICD11APIError(f"No stemId returned for code {icd11_code!r}: {codeinfo}")
 
-        entity = self._get(stem_id)
+        # The API returns stemId as a canonical https://id.who.int/... URI even when served
+        # from the local container; fetching it as-is goes to WHO's cloud and fails with
+        # 401. Re-point the URI at base_url so the lookup stays on the local container.
+        entity = self._get(self.base_url + urlsplit(stem_id).path)
         return ICD11Definition(
             code=icd11_code,
             title=_extract_label(entity.get("title")),
             definition=_extract_label(entity.get("definition")),
-            inclusion=[_extract_label(i) for i in entity.get("inclusion", [])],
-            exclusion=[_extract_label(e.get("linearizationReference", e))
-                       for e in entity.get("exclusion", [])],
+            # Inclusion/exclusion items are {"label": {"@value": ...}, ...references}; the
+            # label is the human-readable criterion, the references are URIs.
+            inclusion=[_extract_label(i.get("label")) for i in entity.get("inclusion", [])],
+            exclusion=[_extract_label(e.get("label")) for e in entity.get("exclusion", [])],
         )
 
 
