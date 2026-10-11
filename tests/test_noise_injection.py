@@ -1,6 +1,7 @@
 import pandas as pd
 
 from src.data.noise_injection import (
+    apply_structured_noise,
     apply_text_noise,
     inject_ghost_billing,
     inject_outpatient_to_inpatient_conversion,
@@ -109,3 +110,43 @@ def test_apply_text_noise_flags_exact_fraction(sample_claims_df):
     original = sample_claims_df.set_index("claim_id")["clinical_notes"]
     for _, row in clean.iterrows():
         assert row["clinical_notes"] == original[row["claim_id"]]
+
+
+def _claims_for_structured_noise(n=200):
+    return pd.DataFrame({
+        "claim_id": [f"C{i}" for i in range(n)],
+        "icd11_code": ["CA40.Z", "BA03"] * (n // 2),
+        "claim_amount": [3360.0, 2240.0] * (n // 2),
+        "patient_age": [40] * n,
+        "patient_sex": ["female"] * n,
+        "discharge_date": ["2025-05-03"] * n,
+        "is_fraud": [0, 1] * (n // 2),
+    })
+
+
+def test_structured_noise_is_reproducible_and_flags_the_fraction():
+    claims = _claims_for_structured_noise()
+    a = apply_structured_noise(claims, fraction=0.10, seed=5)
+    b = apply_structured_noise(claims, fraction=0.10, seed=5)
+    pd.testing.assert_frame_equal(a, b)
+    assert a["has_structured_noise"].sum() == 20
+
+
+def test_structured_noise_never_changes_amounts_or_labels():
+    claims = _claims_for_structured_noise()
+    noisy = apply_structured_noise(claims, fraction=1.0, seed=1)
+    pd.testing.assert_series_equal(noisy["claim_amount"], claims["claim_amount"])
+    pd.testing.assert_series_equal(noisy["is_fraud"], claims["is_fraud"])
+    changed = noisy[["patient_age", "patient_sex", "discharge_date", "icd11_code"]].ne(
+        claims[["patient_age", "patient_sex", "discharge_date", "icd11_code"]]).any(axis=1)
+    assert changed.all()
+
+
+def test_malformed_codes_are_repaired_by_preprocessing():
+    from src.data.preprocessing import repair_icd11_code
+    claims = _claims_for_structured_noise()
+    noisy = apply_structured_noise(claims, fraction=1.0, seed=2)
+    malformed = noisy["icd11_code"] != claims["icd11_code"]
+    assert malformed.any()
+    repaired = noisy.loc[malformed, "icd11_code"].map(repair_icd11_code)
+    assert (repaired == claims.loc[malformed, "icd11_code"]).all()

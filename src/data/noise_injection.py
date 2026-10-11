@@ -205,3 +205,46 @@ def apply_text_noise(claims: pd.DataFrame, fraction: float, rate: float,
         )
         out.at[idx, "has_text_noise"] = True
     return out
+
+
+# Structured fields a data-entry clerk can leave blank. claim_amount is never touched:
+# SHA pays fixed tariffs, so a perturbed amount would look like overbilling and turn a
+# clean claim into a fraud-looking one.
+MISSABLE_FIELDS = ["patient_age", "patient_sex", "discharge_date"]
+
+
+def _malformed_code(code: str, rng: random.Random) -> str:
+    variants = [code.lower(), f" {code} ", f"{code} "]
+    if "." in code:
+        variants.append(code.replace(".", ""))
+    return rng.choice(variants)
+
+
+def apply_structured_noise(claims: pd.DataFrame, fraction: float,
+                           seed: int | None = None) -> pd.DataFrame:
+    """Section 3.2.2 step 3, structured half: gives a random `fraction` of claims one
+    data-quality defect each and records which in `has_structured_noise`:
+
+    - missing value: one of MISSABLE_FIELDS left blank;
+    - malformed code: the ICD-11 code in the wrong case, with stray spaces, or without
+      its dot, all of which ClaimsPreprocessor.align_schema repairs;
+    - numeric perturbation: patient age off by one or two years.
+
+    Fraud labels and claim amounts are unchanged, so the noise tests robustness without
+    changing what counts as fraud."""
+    rng = _rng(seed)
+    out = claims.copy()
+    out["has_structured_noise"] = False
+    out["patient_age"] = out["patient_age"].astype("float64")
+    out["patient_sex"] = out["patient_sex"].astype("object")
+    out["discharge_date"] = out["discharge_date"].astype("object")
+    for idx in rng.sample(list(out.index), min(int(len(out) * fraction), len(out))):
+        defect = rng.choice(["missing", "code_format", "perturb"])
+        if defect == "missing":
+            out.at[idx, rng.choice(MISSABLE_FIELDS)] = None
+        elif defect == "code_format":
+            out.at[idx, "icd11_code"] = _malformed_code(out.at[idx, "icd11_code"], rng)
+        else:
+            out.at[idx, "patient_age"] = max(0.0, out.at[idx, "patient_age"] + rng.choice([-2, -1, 1, 2]))
+        out.at[idx, "has_structured_noise"] = True
+    return out

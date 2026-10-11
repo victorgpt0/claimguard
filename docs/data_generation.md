@@ -174,6 +174,37 @@ dropped or doubled letters, words of four or more letters), and inconsistent cas
 spacing, each applied with probability 0.2 per word or phrase. `has_text_noise` marks
 them, so evaluation can report clean and noisy claims separately (NFR-05).
 
+### 5.6 Structured-field noise (from v0.5)
+
+A further random 10% of claims in every split, chosen independently of the text noise,
+get one data-quality defect each, marked by `has_structured_noise`:
+
+| Defect | Example |
+|---|---|
+| Missing value | `patient_age`, `patient_sex` or `discharge_date` left blank |
+| Malformed code | `ca40.z`, `CA40Z`, ` CA40.Z ` |
+| Numeric perturbation | patient age off by 1 or 2 years |
+
+`claim_amount` and the fraud labels are never changed. SHA pays fixed tariffs, so a
+perturbed amount would look like overbilling and turn a clean claim into a fraud-looking
+one.
+
+The pipeline handles these defects, as Section 3.2.2's first two steps require:
+- `ClaimsPreprocessor.align_schema` repairs malformed codes, since each has one correct
+  reading.
+- `validate_quality` flags missing fields (`quality_flag_missing_field`) and codes that
+  are still invalid (`quality_flag_invalid_code`).
+- `encode_features` fills blanks from the training split (median age, the code's median
+  stay) and counts them in the `has_missing_field` feature, so a defective claim is
+  still scored.
+
+Text noise is deliberately **not** cleaned: robustness to messy notes is what the
+classifier is evaluated on. A cleaner would have to hard-code the generator's own
+abbreviation list, which is circular.
+
+Anything that reads `icd11_code` straight from the parquet files (for example the
+classifier export) must pass it through `repair_icd11_code` first.
+
 ## 6. Outputs and where they live
 
 Generated data is not in git (`/data/` is gitignored). The notebook writes to Google Drive:

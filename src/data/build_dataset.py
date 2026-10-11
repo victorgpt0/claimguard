@@ -30,6 +30,7 @@ from sklearn.model_selection import train_test_split
 
 from src.data.generator import load_catalogue
 from src.data.noise_injection import (
+    apply_structured_noise,
     apply_text_noise,
     inject_ghost_billing,
     inject_outpatient_to_inpatient_conversion,
@@ -75,6 +76,8 @@ UNSEEN_ABBREVIATIONS: dict[str, str] = {
 POOL_FRACTION = 0.10
 NOISE_FRACTION = 0.30
 NOISE_RATE = 0.20
+# Share of claims given one structured-field defect, independent of the text noise.
+STRUCTURED_NOISE_FRACTION = 0.10
 
 
 def _git_commit() -> str:
@@ -197,13 +200,15 @@ def redraw_held_out_fabrications(splits: dict[str, pd.DataFrame], held_out: list
     return out
 
 
-def add_text_noise(splits: dict[str, pd.DataFrame], seed: int) -> dict[str, pd.DataFrame]:
+def add_noise(splits: dict[str, pd.DataFrame], seed: int) -> dict[str, pd.DataFrame]:
     noisy = {}
     for i, (name, df) in enumerate(splits.items()):
         unseen = name in {"test", "deployment_pool"}
         noisy[name] = apply_text_noise(df, fraction=NOISE_FRACTION, rate=NOISE_RATE,
                                        seed=seed + 100 + i,
                                        abbreviations=UNSEEN_ABBREVIATIONS if unseen else None)
+        noisy[name] = apply_structured_noise(noisy[name], fraction=STRUCTURED_NOISE_FRACTION,
+                                             seed=seed + 200 + i)
     return noisy
 
 
@@ -228,7 +233,7 @@ def build(raw: Path, out: Path, seed: int = 42) -> dict:
     claims = derive_labels(claims)
     splits = split_with_pool(claims, seed)
     splits = redraw_held_out_fabrications(splits, held_out_boilerplate, seed)
-    splits = add_text_noise(splits, seed)
+    splits = add_noise(splits, seed)
 
     out.mkdir(parents=True, exist_ok=True)
     for name, df in splits.items():
@@ -247,13 +252,15 @@ def build(raw: Path, out: Path, seed: int = 42) -> dict:
         "per_typology_target": target,
         "pool_fraction": POOL_FRACTION,
         "noise": {"fraction": NOISE_FRACTION, "rate": NOISE_RATE,
-                  "unseen_glossary_splits": ["test", "deployment_pool"]},
+                  "unseen_glossary_splits": ["test", "deployment_pool"],
+                  "structured_fraction": STRUCTURED_NOISE_FRACTION},
         "splits": {
             name: {
                 "claims": len(df),
                 "fraud": int(df["is_fraud"].sum()),
                 "inconsistent": int((df["label"] == "inconsistent").sum()),
                 "text_noise": int(df["has_text_noise"].sum()),
+                "structured_noise": int(df["has_structured_noise"].sum()),
                 "typologies": df["fraud_typology"].value_counts().to_dict(),
             }
             for name, df in splits.items()

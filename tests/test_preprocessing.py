@@ -81,3 +81,19 @@ def test_split_dataset_rejects_bad_proportions(sample_claims_df):
     preprocessor = ClaimsPreprocessor()
     with pytest.raises(ValueError):
         preprocessor.split_dataset(sample_claims_df, train=0.5, val=0.3, test=0.3)
+
+
+def test_defective_claims_are_flagged_imputed_and_still_scored(sample_claims_df):
+    preprocessor = ClaimsPreprocessor()
+    claims = sample_claims_df.copy()
+    claims["icd11_code"] = ["1A00", " 1a01 ", "1A00", "BAD CODE"]
+    claims["patient_age"] = claims["patient_age"].astype(float)
+    claims.loc[1, "patient_age"] = None
+    claims.loc[2, "discharge_date"] = None
+    aligned = preprocessor.align_schema(claims)
+    assert aligned.loc[1, "icd11_code"] == "1A01"
+    flags = preprocessor.validate_quality(aligned)
+    assert flags["quality_flag_missing_field"].tolist() == [False, True, True, False]
+    assert flags["quality_flag_invalid_code"].tolist() == [False, False, False, True]
+    matrix = preprocessor.feature_matrix(aligned, fit=True)
+    assert not pd.isna(matrix).any()

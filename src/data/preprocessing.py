@@ -26,11 +26,28 @@ FEATURE_COLUMNS = [
     "facility_level", "patient_age", "is_female", "is_dependent",
     "code_frequency", "amount_vs_code_median", "unusual_admission",
     "member_claim_count", "member_dependent_claims", "provider_caesarean_share",
+    "has_missing_field",
 ]
+# Fields that may arrive blank and are imputed rather than rejected (Section 3.2.2).
+OPTIONAL_FIELDS = ["patient_age", "patient_sex", "discharge_date"]
+# ICD-11 stem code after repair: four characters, then an optional dot extension.
+ICD11_CODE_PATTERN = r"[0-9A-Z][A-Z][0-9][0-9A-Z](\.[0-9A-Z]{1,4})?"
 HISTORY_COLUMNS = ["claim_id", "member_id", "provider_id", "beneficiary_type", "icd11_code"]
 # ICD-11: single spontaneous vertex delivery, elective and emergency caesarean section.
 CAESAREAN_CODES = {"JB22.0", "JB22.1"}
 DELIVERY_CODES = {"JB20.0"} | CAESAREAN_CODES
+
+
+def repair_icd11_code(code):
+    """Undo formatting faults with one correct reading: stray spaces, lower case, and a
+    dropped dot (ICD-11 stem codes always have four characters before the dot). Anything
+    else is left for validate_quality to flag."""
+    if not isinstance(code, str):
+        return code
+    code = code.strip().upper()
+    if "." not in code and len(code) > 4:
+        code = f"{code[:4]}.{code[4:]}"
+    return code
 
 
 class ClaimsPreprocessor:
@@ -38,6 +55,7 @@ class ClaimsPreprocessor:
         self._scaler: StandardScaler | None = None
         self._code_stats: pd.DataFrame | None = None
         self._history: pd.DataFrame | None = None
+        self._median_age: float = 0.0
 
     def align_schema(self, raw_claims: pd.DataFrame) -> pd.DataFrame:
         """Step 1: rename/reorder/type-cast fields to match the SHA provider portal
@@ -51,6 +69,7 @@ class ClaimsPreprocessor:
         out["discharge_date"] = pd.to_datetime(out["discharge_date"])
         out["claim_amount"] = out["claim_amount"].astype(float)
         out["clinical_notes"] = out["clinical_notes"].fillna("").astype(str)
+        out["icd11_code"] = out["icd11_code"].map(repair_icd11_code)
         return out
 
     def validate_quality(self, claims: pd.DataFrame) -> pd.DataFrame:
@@ -61,6 +80,9 @@ class ClaimsPreprocessor:
         out["quality_flag_date_order"] = out["service_date"] > out["discharge_date"]
         out["quality_flag_negative_amount"] = out["claim_amount"] < 0
         out["quality_flag_missing_notes"] = out["clinical_notes"].str.strip() == ""
+        optional = [f for f in OPTIONAL_FIELDS if f in out.columns]
+        out["quality_flag_missing_field"] = out[optional].isna().any(axis=1)
+        out["quality_flag_invalid_code"] = ~out["icd11_code"].astype(str).str.fullmatch(ICD11_CODE_PATTERN)
         return out
 
     def encode_features(self, claims: pd.DataFrame, fit: bool = False) -> pd.DataFrame:
@@ -77,30 +99,41 @@ class ClaimsPreprocessor:
           post-payment audit sees the claims history, and these patterns (Table 3.1 rows
           4 and 6) only exist across claims. They use no labels.
 
+        Blank optional fields are imputed from the training split (age: median; stay: the
+        code's median stay; sex: halfway between the two encodings) and counted in
+        `has_missing_field`, so a defective claim is still scored.
+
         `fit=True` only on the training split — preprocessing must be fit on training
         data alone to avoid leakage into validation/test (research_writing.txt 5.3.2)."""
         out = claims.copy()
         if fit:
             self._history = out[HISTORY_COLUMNS].copy()
             by_code = out.groupby("icd11_code")
-            admitted = out["discharge_date"] > out["service_date"]
+            known_stay = (out["discharge_date"] - out["service_date"]).dt.days.clip(lower=0)
             self._code_stats = pd.DataFrame({
                 "frequency": by_code.size() / len(out),
                 "median_amount": by_code["claim_amount"].median(),
-                "inpatient_rate": admitted.groupby(out["icd11_code"]).mean(),
+                # Claims with no discharge date are left out of both, not counted as 0.
+                "inpatient_rate": (known_stay > 0).where(known_stay.notna()).groupby(out["icd11_code"]).mean(),
+                "median_stay": known_stay.groupby(out["icd11_code"]).median(),
             })
+            self._median_age = float(out["patient_age"].median())
         elif self._code_stats is None:
             raise RuntimeError("encode_features(fit=True) must run on the training split first")
 
+        stats = self._code_stats.reindex(out["icd11_code"])
+        optional = [f for f in OPTIONAL_FIELDS if f in out.columns]
+        out["has_missing_field"] = out[optional].isna().sum(axis=1).astype(float)
         stay_days = (out["discharge_date"] - out["service_date"]).dt.days.clip(lower=0)
+        stay_days = stay_days.fillna(pd.Series(stats["median_stay"].to_numpy(), index=out.index)).fillna(0)
         out["stay_days"] = stay_days
+        out["patient_age"] = out["patient_age"].astype(float).fillna(self._median_age)
         out["claim_amount_per_day"] = out["claim_amount"] / stay_days.replace(0, 1)
         out["log_claim_amount"] = np.log1p(out["claim_amount"])
         out["is_inpatient"] = (stay_days > 0).astype(float)
         out["is_dependent"] = (out["beneficiary_type"] == "dependent").astype(float)
-        out["is_female"] = (out["patient_sex"] == "female").astype(float)
+        out["is_female"] = out["patient_sex"].map({"female": 1.0, "male": 0.0}).fillna(0.5)
 
-        stats = self._code_stats.reindex(out["icd11_code"])
         # Codes never seen in training count as rare, with no admission history.
         out["code_frequency"] = stats["frequency"].fillna(0.0).to_numpy()
         median = stats["median_amount"].fillna(0.0).to_numpy()

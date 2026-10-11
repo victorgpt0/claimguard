@@ -186,3 +186,17 @@ def test_test_split_fabrication_notes_are_unseen_in_training(built):
 
     assert fabrication_notes(splits["test"])
     assert not fabrication_notes(splits["train"]) & fabrication_notes(splits["test"])
+
+
+def test_structured_noise_is_applied_and_preprocessing_copes(built):
+    from src.data.preprocessing import ClaimsPreprocessor
+    _, manifest, splits = built
+    for name, df in splits.items():
+        assert 0.09 <= df["has_structured_noise"].mean() <= 0.11, name
+        assert manifest["splits"][name]["structured_noise"] == df["has_structured_noise"].sum()
+    preprocessor = ClaimsPreprocessor()
+    train = preprocessor.align_schema(splits["train"])
+    preprocessor.feature_matrix(train, fit=True)
+    test = preprocessor.align_schema(splits["test"])
+    assert not pd.isna(preprocessor.feature_matrix(test)).any()
+    assert not preprocessor.validate_quality(test)["quality_flag_invalid_code"].any()

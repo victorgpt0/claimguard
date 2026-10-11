@@ -52,7 +52,7 @@ backdated.
 - [x] Dataset generation code (11 Oct): stages A-C (`src/data/generator.py`, `note_synthesis.py`, `build_dataset.py`) plus `notebooks/01_generate_dataset.ipynb`. All six Table 3.1 typologies, 10% prevalence, 30% text noise, DR-08 pool, then 60/20/20; `is_fraud` now produced. Tested end to end with a fake LLM (74 tests).
 - [x] Run the notebook on Colab (11 Oct): 5,000 claims, Qwen2.5-7B notes (0 rejected), splits 2,700 / 900 / 900 / 500, ~10% fraud. Fixed a vLLM out-of-memory crash on the T4 along the way. Dataset on Drive, documented in `docs/data_generation.md`, tagged `v0.4-data`.
 - [ ] Log the notes review in `docs/ai_use_log.md` (student's own entry).
-- [ ] Missing-value and numeric-perturbation noise for structured fields (described in 3.2.2, not yet implemented).
+- [ ] Missing-value and numeric-perturbation noise for structured fields (12 Oct: implemented and tested, 10% of claims; preprocessing repairs codes and imputes blanks. Still to do: rebuild the dataset as `v0.5-5k` and rerun the baseline).
 - [x] Isolation Forest baseline (12 Oct): validation precision 0.47, recall 0.55, F1 0.51 (contamination 0.10). Catches conversion and fictitious dependents fully; misses ghost billing and fabrication, as designed (TC-022).
 
 ### Sprint 5 (12–18 Oct): Working core workflow — Progress review
