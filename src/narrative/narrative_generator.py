@@ -27,10 +27,22 @@ Classifier confidence: {confidence:.2f}
 Write a 2-4 sentence plain-language explanation of the inconsistency."""
 
 
+# 4-bit build of Llama 3.1 8B Instruct (Llama 3.1 Community License) that fits a Colab T4
+# alongside the classifier. Not gated, unlike meta-llama's original repository.
+DEFAULT_VLLM_MODEL = "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4"
+
+
 class AuditNarrativeGenerator:
-    def __init__(self, provider: str, model_name: str):
-        self.provider = provider  # "huggingface" | "openai" — see config.yaml
+    def __init__(self, provider: str, model_name: str, gpu_memory_utilization: float = 0.7):
+        """`provider` is "vllm" (open-weight model on the local GPU, used on Colab),
+        "huggingface" (Hugging Face Inference Providers, needs account credit) or
+        "openai" — see config.yaml."""
+        self.provider = provider
         self.model_name = model_name
+        # vLLM reserves this share of GPU memory up front; the rest is left for the
+        # classifier, which runs on the same GPU.
+        self.gpu_memory_utilization = gpu_memory_utilization
+        self._vllm = None
 
     def generate(self, clinical_notes: str, verdict, icd11_definition: str) -> str:
         """Builds the structured prompt (clinical notes + verdict + ICD-11 definition)
@@ -47,11 +59,26 @@ class AuditNarrativeGenerator:
             clinical_notes=clinical_notes,
             confidence=verdict.confidence,
         )
+        if self.provider == "vllm":
+            return self._generate_vllm(prompt)
         if self.provider == "huggingface":
             return self._generate_huggingface(prompt)
         elif self.provider == "openai":
             return self._generate_openai(prompt)
         raise ValueError(f"Unknown LLM provider: {self.provider!r}")
+
+    def _generate_vllm(self, prompt: str) -> str:
+        """Loads the model on first use and keeps it for the rest of the run. Imported
+        lazily: vLLM is installed only on Colab. float16 because the T4 has no bfloat16."""
+        from vllm import LLM, SamplingParams
+
+        if self._vllm is None:
+            self._vllm = LLM(model=self.model_name, dtype="half", max_model_len=2048,
+                             gpu_memory_utilization=self.gpu_memory_utilization,
+                             max_num_batched_tokens=2048)
+        params = SamplingParams(temperature=0.3, max_tokens=200, seed=0)
+        outputs = self._vllm.chat([{"role": "user", "content": prompt}], params, use_tqdm=False)
+        return outputs[0].outputs[0].text.strip()
 
     def _generate_huggingface(self, prompt: str) -> str:
         from huggingface_hub import InferenceClient

@@ -205,8 +205,9 @@ def main() -> None:
                         help="run with the untrained base model (wiring checks only)")
     parser.add_argument("--db", required=True, help="SQLite database the dashboard reads")
     parser.add_argument("--contamination", type=float, default=DEFAULT_CONTAMINATION)
-    parser.add_argument("--llm-provider", default="huggingface")
-    parser.add_argument("--llm-model", help="omit to skip narratives")
+    parser.add_argument("--llm-provider", default="vllm", choices=["vllm", "huggingface", "openai"])
+    parser.add_argument("--llm-model", help="e.g. hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4; "
+                                            "omit to skip narratives")
     parser.add_argument("--log-dir", type=Path, default=Path("experiments/pipeline_runs"))
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()

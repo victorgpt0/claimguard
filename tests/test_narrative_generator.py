@@ -53,3 +53,22 @@ def test_generate_unknown_provider_raises():
     generator = AuditNarrativeGenerator(provider="carrier-pigeon", model_name="x")
     with pytest.raises(ValueError):
         generator.generate("notes", _FakeVerdict("inconsistent"), "definition")
+
+
+def test_vllm_provider_loads_model_once_and_reuses_it():
+    import sys
+    from types import SimpleNamespace
+
+    fake_vllm = MagicMock()
+    fake_vllm.LLM.return_value.chat.return_value = [
+        SimpleNamespace(outputs=[SimpleNamespace(text="  Narrative.  ")])]
+    generator = AuditNarrativeGenerator(provider="vllm", model_name="fake-awq")
+    with patch.dict(sys.modules, {"vllm": fake_vllm}):
+        first = generator.generate("Notes A.", _FakeVerdict("inconsistent"), "Definition X")
+        generator.generate("Notes B.", _FakeVerdict("inconsistent"), "Definition Y")
+
+    assert first == "Narrative."
+    assert fake_vllm.LLM.call_count == 1
+    assert fake_vllm.LLM.call_args.kwargs["dtype"] == "half"
+    prompt = fake_vllm.LLM.return_value.chat.call_args_list[1].args[0][0]["content"]
+    assert "Notes B." in prompt and "Definition Y" in prompt
