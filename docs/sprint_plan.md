@@ -59,7 +59,7 @@ backdated.
 - [ ] Orchestration script: claims batch → preprocessing → Isolation Forest and Autoencoder → SHAP → classifier → ICD-11 lookup → LLM narrative → report saved to SQLite. (12 Oct: `src/pipeline.py` built and wiring-tested on the 500-claim pool with a stand-in classifier, 19 s on CPU, 44 reports the dashboard reads (TC-025). Waits on the trained classifier and an LLM model choice.)
 - [x] Fill the ICD-11 cache for every code in the dataset (12 Oct): 38 codes in `artifacts/icd11_cache.json`; residual categories inherit their parent's definition (TC-024).
 - [ ] Choose the LLM provider and model; run the narrative layer on real flagged claims. (12 Oct: Hugging Face Inference returned 402, no account credit, so the narrative model runs on the Colab T4 with vLLM instead: 4-bit Llama 3.1 8B Instruct, `notebooks/03_run_pipeline.ipynb`. Gershon et al. (2025) turned out not to support a model choice; the choice rests on practical grounds and three passages citing it for ICD-11 need rewording in the documentation. Real run pending.)
-- [ ] Single-seed classifier fine-tune on Colab, enough to run the core workflow. (12 Oct: export script, `train.py` fixes (GPU, best-checkpoint metrics, class-weighted loss, per-batch padding) and `notebooks/02_train_classifier.ipynb` ready; run pending.)
+- [x] Single-seed classifier fine-tune on Colab (12 Oct): seed 42, validation precision 0.917, recall 0.978, F1 0.946 (TC-026). Per-typology breakdown pending.
 - [ ] Dashboard shows generated reports; auditor can record a decision.
 - [ ] Test records in `tests/test_plan.md`: expected result, actual result, correction (valid input, invalid input and failure cases).
 - [ ] Chapter 5 started: environment, implemented modules, initial results.
