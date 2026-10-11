@@ -47,9 +47,10 @@ backdated.
 - [x] English-only scope approved; code-switching replaced by text-noise injection; classifier switched to Bio_ClinicalBERT (60 tests passing).
 - [x] `.gitignore` fixed so `src/data/` is version-controlled.
 - [x] Chapters 1–4 condensed and converted to past tense.
-- [ ] Commit and push all of the above.
-- [ ] Choose the base claims dataset (DE-SynPUF and Synthea) and document its source and preparation.
-- [ ] Dataset generation script: Table 3.1 injections at documented rates, text noise, 60/20/20 split plus the Deployment/Demonstration Pool. First version may be smaller than 20,000 claims.
+- [x] Commit and push all of the above.
+- [x] Base claims source decided (11 Oct): a custom generator over a catalogue of 37 ICD-11 codes priced from LN 56/2025, replacing DE-SynPUF/Synthea. Synthea's case mix is US-specific (no malaria), it codes in SNOMED, and neither source has ICD-11 codes or clinical free text. Chapter 3 Section 3.2.1 wording must be updated to match.
+- [x] Dataset generation code (11 Oct): stages A-C (`src/data/generator.py`, `note_synthesis.py`, `build_dataset.py`) plus `notebooks/01_generate_dataset.ipynb`. All six Table 3.1 typologies, 10% prevalence, 30% text noise, DR-08 pool, then 60/20/20; `is_fraud` now produced. Tested end to end with a fake LLM (74 tests).
+- [ ] Run the notebook on Colab (5,000 claims, Qwen2.5-7B notes), read a sample of the notes, log the review in `docs/ai_use_log.md`.
 - [ ] Missing-value and numeric-perturbation noise for structured fields (described in 3.2.2, not yet implemented).
 - [ ] Isolation Forest baseline trained, with validation precision, recall and F1.
 

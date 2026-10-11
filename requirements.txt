@@ -27,5 +27,5 @@ PyYAML>=6.0.2
 pytest>=8.3.2
 pytest-mock>=3.14.0
 
-# Not a pip package: Synthea (synthetic patient generator, Section 3.2.1) is a standalone Java
-# tool. Install separately per https://github.com/synthetichealth/synthea — not listed above.
+# Colab only, for stage B note synthesis (src/data/note_synthesis.py): vllm==0.19.0. Not
+# listed here because it needs a CUDA GPU; the notebook installs it.

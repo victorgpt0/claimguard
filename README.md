@@ -30,7 +30,7 @@ Diagram), so the OOAD-to-code mapping stays visible as the project develops:
 ```
 src/
 ├── config.py          # loads config/config.yaml + .env
-├── data/              # ClaimsPreprocessor + fraud/text-noise injection (Table 3.1)
+├── data/              # dataset generation (stages A-C), ClaimsPreprocessor, Table 3.1 injection
 ├── detection/         # IsolationForestDetector, AutoencoderDetector
 ├── explainability/     # SHAPExplainer
 ├── classification/     # SemanticConsistencyClassifier + LoRA/PEFT fine-tuning
@@ -80,6 +80,32 @@ docker-compose.yml           # WHO ICD-11 API, self-hosted
    only two that will ever exist; in-app account management is out of scope (FR-11 scope
    note).
 
+## Dataset
+
+The synthetic claims dataset is built in three stages (Section 3.2.1); all three run from
+`notebooks/01_generate_dataset.ipynb` on a Colab T4, writing to Google Drive.
+
+| Stage | Command | Runs on |
+|---|---|---|
+| A. Structured claims, provider-level typologies | `python -m src.data.generator --n-claims 5000 --out data/raw` | CPU |
+| B. LLM clinical notes (data synthesis only) | `python -m src.data.note_synthesis --requests data/raw/note_requests.jsonl --out data/raw/notes.jsonl --boilerplate-out data/raw/boilerplate_notes.jsonl` | GPU (vLLM, or `--backend transformers`) |
+| C. Claim-level typologies, labels, splits, noise | `python -m src.data.build_dataset --raw data/raw --out data/processed` | CPU |
+
+- **Conditions and tariffs:** `src/data/sha_catalogue.yaml`. 37 ICD-11 codes verified
+  against the WHO ICD-11 API (MMS 2026-01), priced from Legal Notice No. 56 of 2025
+  (SHA Tariffs for Healthcare Services). Outpatient care is capitation-paid (KES 0 per
+  claim), medical admissions are per diem by facility level, and maternity and surgery
+  are case rates.
+- **Fraud:** ~10% of claims, split evenly across the six Table 3.1 typologies, one
+  typology per claim. `is_fraud` marks any typology, and `label` is the classifier target:
+  `inconsistent` for upcoding, ghost billing and record fabrication, and `consistent`
+  otherwise.
+- **Splits:** a 10% Deployment/Demonstration Pool (DR-08) is carved off first, then the
+  rest is split 60/20/20, stratified by typology. The test split and pool get
+  shorthand-noise forms and fabrication notes never seen in training (DR-03).
+- `data/processed/manifest.json` records the git commit, input file hashes, parameters
+  and per-split counts.
+
 ## Running
 
 ```bash
@@ -107,8 +133,11 @@ docker compose down
 ## Testing
 
 ```bash
-pytest tests/
+venv/bin/python -m pytest -q
 ```
+
+Use `python -m pytest`, not bare `pytest`: there is no package config, and `python -m` is
+what puts the repo root on `sys.path`.
 
 Tests mock anything that would otherwise need a GPU, a real model download, or a live
 external API (HF/OpenAI calls, the ICD-11 container, transformer weight loading) — they

@@ -7,13 +7,16 @@ traceability the thesis claims actually holds in the generated data.
 Claims are pandas DataFrames with at minimum: claim_id, provider_id, icd11_code,
 claim_amount, service_date, discharge_date, clinical_notes, claim_type
 ("outpatient"/"inpatient"), tariff.
+
+Rows 4 (inflated caesarean rates) and 6 (anomalous dependent counts) change claim volumes
+rather than editing claims, so they are generated in src/data/generator.py, which labels
+only the excess claims.
 """
 from __future__ import annotations
 
 import random
 import re
 
-import numpy as np
 import pandas as pd
 
 # Clinical shorthand substituted at a controlled rate to simulate the abbreviated,
@@ -61,6 +64,8 @@ def inject_upcoding(claims: pd.DataFrame, rate: float, tariff_lookup: dict[str, 
     rng = _rng(seed)
     out = claims.copy()
     out["is_upcoded"] = False
+    # The code the clinical notes actually describe; kept for evaluation and auditing.
+    out["original_icd11_code"] = out["icd11_code"]
     eligible = out.index[out["icd11_code"].isin(higher_tariff_codes)].tolist()
     n_to_flag = int(len(eligible) * rate)
     for idx in rng.sample(eligible, min(n_to_flag, len(eligible))):
@@ -74,60 +79,54 @@ def inject_upcoding(claims: pd.DataFrame, rate: float, tariff_lookup: dict[str, 
 
 def inject_outpatient_to_inpatient_conversion(claims: pd.DataFrame, rate: float,
                                                outpatient_only_codes: set[str],
-                                               seed: int | None = None) -> pd.DataFrame:
+                                               seed: int | None = None,
+                                               per_diem_rates: dict[int, float] | None = None
+                                               ) -> pd.DataFrame:
     """Re-label a configurable proportion of outpatient-eligible claims as inpatient
     admissions with a synthetically extended length of stay, while clinical notes retain
-    outpatient-consistent language. Table 3.1 row 2 (Kilei, 2025)."""
+    outpatient-consistent language. Table 3.1 row 2 (Kilei, 2025).
+
+    With `per_diem_rates` (SHIF inpatient rate by facility level, LN 56/2025), the converted
+    claim is billed as rate x stay, and only facilities that can admit (levels in the rate
+    table) are eligible: this is how a capitation-paid outpatient visit becomes a paid
+    admission."""
     rng = _rng(seed)
     out = claims.copy()
     out["is_converted_admission"] = False
-    eligible = out.index[
-        (out["claim_type"] == "outpatient") & (out["icd11_code"].isin(outpatient_only_codes))
-    ].tolist()
+    eligible_mask = (out["claim_type"] == "outpatient") & (out["icd11_code"].isin(outpatient_only_codes))
+    if per_diem_rates is not None:
+        eligible_mask &= out["facility_level"].isin(per_diem_rates)
+    eligible = out.index[eligible_mask].tolist()
     n_to_flag = int(len(eligible) * rate)
     for idx in rng.sample(eligible, min(n_to_flag, len(eligible))):
         service_date = pd.to_datetime(out.at[idx, "service_date"])
         extended_stay_days = rng.randint(1, 4)
         out.at[idx, "claim_type"] = "inpatient"
         out.at[idx, "discharge_date"] = (service_date + pd.Timedelta(days=extended_stay_days)).date().isoformat()
+        if per_diem_rates is not None:
+            out.at[idx, "claim_amount"] = per_diem_rates[out.at[idx, "facility_level"]] * extended_stay_days
         out.at[idx, "is_converted_admission"] = True
     return out
 
 
 def inject_ghost_billing(claims: pd.DataFrame, rate: float,
-                          templated_notes: list[str], seed: int | None = None) -> pd.DataFrame:
+                          donor_notes: pd.DataFrame, seed: int | None = None) -> pd.DataFrame:
     """Generate claims with no corresponding realistic care pathway: a billed procedure
-    and tariff with templated, generic clinical justification inconsistent with the
-    billed diagnosis. Table 3.1 row 3 (Kilei, 2025)."""
+    and tariff whose clinical justification is internally inconsistent with the billed
+    diagnosis. Table 3.1 row 3 (Kilei, 2025).
+
+    Each selected claim takes a real note from `donor_notes` (columns icd11_code,
+    clinical_notes) written for a condition in a different ICD-11 chapter (the code's
+    first character), so the note describes some other patient's care entirely."""
     rng = _rng(seed)
     out = claims.copy()
     out["is_ghost_billed"] = False
+    donor_chapters = donor_notes["icd11_code"].str[0]
     n_to_flag = int(len(out) * rate)
     for idx in rng.sample(list(out.index), min(n_to_flag, len(out))):
-        out.at[idx, "clinical_notes"] = rng.choice(templated_notes)
+        candidates = donor_notes.loc[donor_chapters != out.at[idx, "icd11_code"][0], "clinical_notes"]
+        out.at[idx, "clinical_notes"] = candidates.iloc[rng.randrange(len(candidates))]
         out.at[idx, "is_ghost_billed"] = True
-    return out
-
-
-def inject_inflated_caesarean_rate(providers: pd.DataFrame, rate: float,
-                                    who_recommended_max: float = 0.15,
-                                    inflation_margin: float = 0.20,
-                                    seed: int | None = None) -> pd.DataFrame:
-    """Construct provider-level synthetic caesarean-delivery proportions so a subset of
-    providers exceed the WHO-recommended threshold. Table 3.1 row 4 (Kilei, 2025;
-    Section 1.1 WHO guidance). `providers` needs columns: provider_id, total_deliveries."""
-    rng = np.random.default_rng(seed)
-    out = providers.copy()
-    out["is_inflated_csection_provider"] = False
-    n_to_flag = int(len(out) * rate)
-    flagged_idx = rng.choice(out.index, size=min(n_to_flag, len(out)), replace=False)
-    csection_rate = np.where(
-        out.index.isin(flagged_idx),
-        who_recommended_max + inflation_margin + rng.uniform(0, 0.10, size=len(out)),
-        rng.uniform(0.05, who_recommended_max, size=len(out)),
-    )
-    out["csection_deliveries"] = (out["total_deliveries"] * csection_rate).round().astype(int)
-    out.loc[out.index.isin(flagged_idx), "is_inflated_csection_provider"] = True
     return out
 
 
@@ -143,25 +142,6 @@ def inject_record_fabrication(claims: pd.DataFrame, rate: float,
     for idx in rng.sample(list(out.index), min(n_to_flag, len(out))):
         out.at[idx, "clinical_notes"] = rng.choice(boilerplate_notes)
         out.at[idx, "is_fabricated_record"] = True
-    return out
-
-
-def inject_anomalous_dependent_counts(providers: pd.DataFrame, rate: float,
-                                       realistic_max_by_facility_type: dict[str, int],
-                                       seed: int | None = None) -> pd.DataFrame:
-    """Assign synthetic providers beneficiary-dependent counts exceeding what's realistic
-    for their registered facility type/size. Table 3.1 row 6 (Kizito, 2026 — the Kwale
-    County case)."""
-    rng = np.random.default_rng(seed)
-    out = providers.copy()
-    out["is_anomalous_dependent_count"] = False
-    n_to_flag = int(len(out) * rate)
-    flagged_idx = rng.choice(out.index, size=min(n_to_flag, len(out)), replace=False)
-    for idx in flagged_idx:
-        facility_type = out.at[idx, "facility_type"]
-        realistic_max = realistic_max_by_facility_type.get(facility_type, 20)
-        out.at[idx, "dependent_count"] = realistic_max * rng.integers(3, 10)
-        out.at[idx, "is_anomalous_dependent_count"] = True
     return out
 
 

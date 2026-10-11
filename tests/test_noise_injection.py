@@ -2,9 +2,7 @@ import pandas as pd
 
 from src.data.noise_injection import (
     apply_text_noise,
-    inject_anomalous_dependent_counts,
     inject_ghost_billing,
-    inject_inflated_caesarean_rate,
     inject_outpatient_to_inpatient_conversion,
     inject_record_fabrication,
     inject_text_noise,
@@ -25,6 +23,10 @@ def test_inject_upcoding_replaces_code_and_amount(sample_claims_df):
     assert len(upcoded_rows) == 2
     assert (upcoded_rows["icd11_code"] == "9Z99").all()
     assert (upcoded_rows["claim_amount"] == 9999.0).all()
+    # The notes still describe the original code; that code must be kept for evaluation.
+    assert (upcoded_rows["original_icd11_code"] == "1A00").all()
+    untouched = result[~result["is_upcoded"]]
+    assert (untouched["original_icd11_code"] == untouched["icd11_code"]).all()
 
 
 def test_inject_outpatient_to_inpatient_conversion(sample_claims_df):
@@ -38,13 +40,30 @@ def test_inject_outpatient_to_inpatient_conversion(sample_claims_df):
     assert (converted["claim_type"] == "inpatient").all()
 
 
-def test_inject_ghost_billing_replaces_notes(sample_claims_df):
-    result = inject_ghost_billing(
-        sample_claims_df, rate=0.5, templated_notes=["Boilerplate note."], seed=1
+def test_conversion_bills_per_diem_only_where_admission_is_possible(sample_claims_df):
+    claims = sample_claims_df.assign(facility_level=[2, 2, 4, 4])
+    result = inject_outpatient_to_inpatient_conversion(
+        claims, rate=1.0, outpatient_only_codes={"1A00"}, seed=1,
+        per_diem_rates={3: 2240.0, 4: 3360.0},
     )
+    converted = result[result["is_converted_admission"]]
+    # Claim 1 is at a Level 2 dispensary, which cannot admit; only claim 3 converts.
+    assert converted["claim_id"].tolist() == [3]
+    stay = (pd.to_datetime(converted["discharge_date"]) - pd.to_datetime(converted["service_date"])).dt.days
+    assert (converted["claim_amount"] == 3360.0 * stay).all()
+
+
+def test_inject_ghost_billing_uses_notes_from_another_chapter(sample_claims_df):
+    donors = pd.DataFrame({
+        "icd11_code": ["1A40.Z", "JB20.0"],
+        "clinical_notes": ["Same-chapter note.", "Delivered a live infant, no complications."],
+    })
+    claims = sample_claims_df.assign(icd11_code="1F40.Z")
+    result = inject_ghost_billing(claims, rate=0.5, donor_notes=donors, seed=1)
     flagged = result[result["is_ghost_billed"]]
     assert len(flagged) == 2
-    assert (flagged["clinical_notes"] == "Boilerplate note.").all()
+    # Chapter 1 claims may only receive the chapter J donor note.
+    assert (flagged["clinical_notes"] == "Delivered a live infant, no complications.").all()
 
 
 def test_inject_record_fabrication(sample_claims_df):
@@ -53,30 +72,6 @@ def test_inject_record_fabrication(sample_claims_df):
     )
     assert result["is_fabricated_record"].all()
     assert (result["clinical_notes"] == "Generic template text.").all()
-
-
-def test_inject_inflated_caesarean_rate():
-    providers = pd.DataFrame({"provider_id": ["P1", "P2", "P3", "P4"],
-                               "total_deliveries": [100, 100, 100, 100]})
-    result = inject_inflated_caesarean_rate(providers, rate=0.5, seed=1)
-    flagged = result[result["is_inflated_csection_provider"]]
-    assert len(flagged) == 2
-    assert (flagged["csection_deliveries"] / flagged["total_deliveries"] > 0.15).all()
-
-
-def test_inject_anomalous_dependent_counts():
-    providers = pd.DataFrame({
-        "provider_id": ["P1", "P2"],
-        "facility_type": ["dispensary", "hospital"],
-        "dependent_count": [5, 10],
-    })
-    realistic_max = {"dispensary": 10, "hospital": 50}
-    result = inject_anomalous_dependent_counts(
-        providers, rate=1.0, realistic_max_by_facility_type=realistic_max, seed=1
-    )
-    assert result["is_anomalous_dependent_count"].all()
-    for _, row in result.iterrows():
-        assert row["dependent_count"] > realistic_max[row["facility_type"]]
 
 
 def test_inject_text_noise_abbreviates_known_terms():
