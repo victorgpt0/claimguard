@@ -63,3 +63,23 @@ def test_class_weights_favour_the_rare_class():
     consistent, inconsistent = class_weights(examples).tolist()
     assert inconsistent == pytest.approx(19 * consistent)
     assert (consistent + inconsistent) / 2 == pytest.approx(5.26, abs=0.01)
+
+
+def test_stratify_splits_by_typology_noise_and_code_frequency():
+    from src.classification.evaluate import stratify
+    predictions = pd.DataFrame({
+        "actual":    [1, 1, 0, 0, 0],
+        "predicted": [1, 0, 1, 0, 0],
+        "fraud_typology": ["upcoding", "ghost_billing", "none", "none", "inflated_caesarean"],
+        "has_text_noise": [True, False, False, True, False],
+        "has_structured_noise": [False] * 5,
+        "icd11_code": ["JB22.1", "JB22.1", "CA40.Z", "RARE", "JB22.1"],
+    })
+    train_codes = ["JB22.1"] * 120 + ["CA40.Z"] * 79 + ["RARE"]  # RARE: 1 of 200 = 0.5%
+    result = stratify(predictions, train_codes)
+    assert result["overall"]["recall"] == 0.5
+    assert result["flagged_by_typology"]["upcoding"]["rate"] == 1.0
+    assert result["flagged_by_typology"]["ghost_billing"]["rate"] == 0.0
+    assert result["text_noise"]["True"]["claims"] == 2
+    assert result["code_frequency"]["common"]["claims"] == 4
+    assert result["code_frequency"]["rare"]["claims"] == 1

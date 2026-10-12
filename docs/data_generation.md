@@ -259,7 +259,11 @@ is 270 / 90 / 90 / 50 claims with a structured defect in train / validation / te
    delivery"). The classifier may succeed by matching diagnosis words against the code
    title rather than by clinical reasoning. Real notes do this too, but it makes the task
    easier than it is in practice. To be stated under Section 3.9 (construct validity), or
-   reduced by having some notes describe findings only.
+   reduced by having some notes describe findings only. **Evidence (TC-027):** the first
+   classifier caught every delivery-to-caesarean upcode, and 3 of its 4 false positives were
+   genuine caesarean notes written as "CS" or "C/S", so it appears to key on the word
+   "caesarean". Upcoding in validation is 14 of 15 delivery pairs, so the surgical pairs
+   are barely tested.
 3. **Upcoding is mostly deliveries** (about 83% normal delivery → caesarean), because
    deliveries dominate the eligible claims. This is realistic for SHA's case mix, but
    per-pair results will be thin for the surgical pairs.

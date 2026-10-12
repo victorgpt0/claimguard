@@ -211,7 +211,9 @@ def main() -> None:
     parser.add_argument("--log-dir", type=Path, default=Path("experiments/pipeline_runs"))
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    # INFO for this module only: shap logs every KernelSHAP iteration at INFO.
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
+    logger.setLevel(logging.INFO)
 
     from src.classification.classifier import SemanticConsistencyClassifier
     from src.config import REPO_ROOT
