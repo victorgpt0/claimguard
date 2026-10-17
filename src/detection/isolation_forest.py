@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import numpy as np
 from sklearn.ensemble import IsolationForest
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, recall_score
 
 from src.detection.base import BaseAnomalyDetector
 
@@ -43,3 +43,22 @@ class IsolationForestDetector(BaseAnomalyDetector):
             if f1 > best_f1:
                 best_f1, best_contamination, best_model = f1, contamination, detector
         return best_contamination, best_model
+
+    @staticmethod
+    def tune_contamination_for_recall(train_features: np.ndarray, val_features: np.ndarray,
+                                      val_labels: np.ndarray, min_recall: float,
+                                      candidates: list[float] | None = None,
+                                      random_state: int = 42) -> tuple[float, "IsolationForestDetector"]:
+        """As the first stage of a funnel the forest should be generous (NFR-05): the
+        smallest contamination in the grid whose validation recall reaches `min_recall`,
+        or the largest in the grid if none does. The F1 version above picks 0.05, which
+        lets most upcoding and inflated caesarean claims through (docs/sprint_plan.md)."""
+        candidates = sorted(candidates or [round(0.05 * i, 2) for i in range(1, 9)])
+        detector = None
+        for contamination in candidates:
+            detector = IsolationForestDetector(contamination=contamination, random_state=random_state)
+            detector.fit(train_features)
+            predicted_anomaly = detector.model.predict(val_features) == -1
+            if recall_score(val_labels, predicted_anomaly, zero_division=0) >= min_recall:
+                return contamination, detector
+        return candidates[-1], detector

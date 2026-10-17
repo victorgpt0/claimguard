@@ -10,7 +10,16 @@ paths:
   db_path: /content/drive/MyDrive/claimguard/db/sha_fraud.sqlite
 
 thresholds:
-  # Isolation Forest / Autoencoder anomaly score threshold (FR-02). Not yet tuned.
+  # Stage 1 (FR-02, #50), from `python -m src.detection.tune_stage1` on the v0.5-5k
+  # validation split, 5 seeds: the union of the three components reaches recall >= 0.80
+  # (mean 0.82, previously 0.37) while passing on 27% of clean claims. Re-run on v0.6.
+  isolation_forest_contamination: 0.15
+  # Autoencoder flags reconstruction errors above this quantile of its training errors.
+  autoencoder_train_quantile: 0.975
+  # Text-consistency screen: flags notes whose TF-IDF cosine similarity to the billed
+  # code's ICD-11 reference text is at most this (passes on 15% of clean claims).
+  text_screen_threshold: 0.006211
+  # Legacy single anomaly-score threshold, superseded by the three values above.
   anomaly_score_threshold: null
   # Semantic Consistency Classifier decision threshold (FR-04). Not yet tuned.
   classifier_decision_threshold: null
