@@ -60,14 +60,34 @@ backdated.
 - [x] Fill the ICD-11 cache for every code in the dataset (12 Oct): 38 codes in `artifacts/icd11_cache.json`; residual categories inherit their parent's definition (TC-024).
 - [x] Choose the LLM provider and model; run the narrative layer on real flagged claims. (12 Oct: Hugging Face Inference returned 402, no account credit, so the narrative model runs on the Colab T4 with vLLM instead: 4-bit Llama 3.1 8B Instruct, `notebooks/03_run_pipeline.ipynb`. Gershon et al. (2025) turned out not to support a model choice; the choice rests on practical grounds and three passages citing it for ICD-11 need rewording in the documentation. Real run pending.)
 - [x] Single-seed classifier fine-tune on Colab (12 Oct): seed 42, validation precision 0.917, recall 0.978, F1 0.946 (TC-026). Per-typology breakdown (TC-027, `src/classification/evaluate.py`): fabrication 15/15, upcoding 15/15, ghost 14/15; false positives are mostly genuine caesarean notes written as "CS", a word-matching shortcut to address in the next dataset version.
-- [ ] Dashboard shows generated reports; auditor can record a decision.
+- [x] Dashboard shows generated reports; auditor can record a decision. (17 Oct, `3f083c0`, TC-029.)
 - [ ] Test records in `tests/test_plan.md`: expected result, actual result, correction (valid input, invalid input and failure cases).
 - [ ] Chapter 5 started: environment, implemented modules, initial results.
 - [ ] Prepare the review: demo, test evidence, one AI suggestion checked (from `docs/ai_use_log.md`).
 
 ## Course Sprint III: Approaching Completion and Hosting
 
+### Decisions for Sprints 6–8 (17 Oct)
+Code instructions in `docs/remaining_work_plan.md`.
+- **Funnel (#50):** stage 1 = Isolation Forest tuned for recall + autoencoder + a TF-IDF
+  text-consistency screen, with NFR-05's recall floor applied to the union (TC-030).
+  Chapters 3/4 need a "text-consistency screen" box in stage 1.
+- **Consistent verdicts (#46):** two review lanes, "text inconsistent" and "structural
+  anomaly"; a screen-only flag the classifier clears is logged, not queued. FR-05 wording
+  to update.
+- **Explanation scoring (#37):** single rater (the researcher), no Krippendorff's alpha;
+  Section 3.2.4 to be changed and the limitation stated.
+- **Hosting (#32):** Cloudflare Tunnel from the researcher's machine recommended
+  (`docs/hosting_guide.md` option A); to confirm.
+- **Commits:** one per issue on `dev`, pushed after review.
+
 ### Sprint 6 (19–25 Oct): Full training and feedback loop
+Started early on 17 Oct: the code below is written and unit-tested; the runs are not.
+- [x] Caesarean "CS" shortcut removed from the training noise before regenerating (#51).
+- [x] Stage-1 tuning script and text screen; v0.5 values in `config.example.yaml` (#28, #50, TC-030). Re-run on v0.6.
+- [x] Review lanes and flag sources in the pipeline and dashboard (#46); first validation run with tuned stage 1 (TC-031).
+- [x] Code: seed summary (#29), rule-based baseline (#30), retraining script and history (#31, #47, #48, #49), evaluation harness (#33–#38).
+- [ ] **Open question from TC-031:** on validation the rule-based baseline has the higher F1 (0.60 vs 0.51): the structural-anomaly lane carries most of the pipeline's false positives, and the rules catch inflated caesarean, which the pipeline misses.
 - [ ] Full dataset (about 20,000 claims), regenerated if Sprint 4 used a smaller one.
 - [ ] Autoencoder threshold and Isolation Forest contamination tuned on the validation split; values recorded.
 - [ ] Classifier fine-tuned with all 5 seeds on Colab; evidence saved per run in Drive.
