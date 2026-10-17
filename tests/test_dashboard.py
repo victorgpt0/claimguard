@@ -30,7 +30,8 @@ def config(tmp_path, monkeypatch):
             "claim_amount": 30000.0, "service_date": "2026-01-01",
             "clinical_notes": "Forceps-assisted vaginal delivery.", "anomaly_score": score})
         verdict_id = repository.save_verdict(claim_id, verdict, 0.9, "test")
-        repository.save_report(claim_id, verdict_id, {"claim_amount": 0.2, "stay_days": -0.1}, narrative)
+        repository.save_report(claim_id, verdict_id, {"claim_amount": 0.2, "stay_days": -0.1}, narrative,
+                               ["isolation_forest", "text_screen"])
 
     runs = tmp_path / "experiments" / "pipeline_runs"
     runs.mkdir(parents=True)
@@ -74,11 +75,12 @@ def test_opens_without_sign_in_and_shows_statistics(config):
 def test_review_queue_orders_and_filters(config):
     app = _app()
     assert _report_picker(app).options[0].startswith("#2")  # highest anomaly score first
-    app = next(s for s in app.selectbox if s.label == "Verdict").select("inconsistent").run()
+    app = next(s for s in app.selectbox if s.label == "Lane").select("Text inconsistent").run()
     assert [o[:2] for o in _report_picker(app).options] == ["#1"]
     markdown = " ".join(m.value for m in app.markdown)
     assert "Notes describe a forceps delivery." in markdown  # panel 6, the narrative
     assert "Delivery by emergency caesarean section" in markdown  # panel 3, the ICD-11 title
+    assert "Flagged by: Isolation Forest, text-consistency screen" in markdown  # panel 4
     assert app.text[0].value == "Forceps-assisted vaginal delivery."  # panel 2, the notes
     metrics = {m.label: m.value for m in app.metric}
     assert metrics["Service date"] == "2026-01-01"
@@ -87,13 +89,13 @@ def test_review_queue_orders_and_filters(config):
 
 def test_consistent_verdict_explains_the_missing_narrative(config):
     app = _app()
-    app = next(s for s in app.selectbox if s.label == "Verdict").select("consistent").run()
+    app = next(s for s in app.selectbox if s.label == "Lane").select("Structural anomaly").run()
     assert any("No narrative: the classifier found the notes consistent" in i.value for i in app.info)
 
 
 def test_approving_a_report_records_it_and_writes_feedback(config):
     app = _app()
-    app = next(s for s in app.selectbox if s.label == "Verdict").select("inconsistent").run()
+    app = next(s for s in app.selectbox if s.label == "Lane").select("Text inconsistent").run()
     app = next(b for b in app.button if b.label == "Approved").click().run()
     with sqlite3.connect(config["paths"]["db_path"]) as conn:
         assert conn.execute("SELECT status FROM AuditReport WHERE id = 1").fetchone()[0] == "approved"

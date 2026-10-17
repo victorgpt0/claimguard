@@ -1,21 +1,33 @@
 """Audit pipeline orchestration (Figure 4.2 architecture, Figure 4.4 sequence): runs a batch
 of claims through every stage and saves an AuditReport per flagged claim.
 
-    claims batch -> ClaimsPreprocessor -> Isolation Forest + Autoencoder (stage 1 funnel)
-      -> flagged claims only: SHAP attribution -> Semantic Consistency Classifier
-      -> inconsistent only: ICD-11 reference text -> LLM narrative
+    claims batch -> ClaimsPreprocessor -> Isolation Forest + Autoencoder + text screen
+      (stage 1 funnel) -> flagged claims only: SHAP attribution -> Semantic Consistency
+      Classifier -> inconsistent only: ICD-11 reference text -> LLM narrative
       -> AuditReport saved to SQLite (pending review on the dashboard)
 
-The detectors are fitted on the training split at start-up (seconds on a CPU). Claims the
-detectors do not flag never reach the classifier: that is the funnel design, and its cost
-is recorded in docs/sprint_plan.md ("Later improvements").
+The detectors and the screen are fitted on the training split at start-up (seconds on a
+CPU). Claims stage 1 does not flag never reach the classifier: that is the funnel design.
+The text-consistency screen (#50) exists so that fraud visible only in the notes still
+reaches the classifier.
+
+A flagged claim's report goes to one of two review lanes (#46): "text_inconsistent" when
+the classifier finds the notes inconsistent with the billed code (with a narrative), and
+"structural_anomaly" when the notes are consistent but a structured-data detector flagged
+the claim (conversion and dependent fraud have consistent notes). A claim flagged only by
+the text screen whose notes the classifier finds consistent is a false positive of the
+screen: its verdict is saved, but no report is queued (FR-05).
 
 Each run also writes a JSON run log mapping database ids to dataset claim ids, with every
 stage's output, so the stored reports can be evaluated against the ground-truth labels.
 Labels are never read to make a decision.
 
     python -m src.pipeline --data data/processed/v0.5-5k --batch deployment_pool \\
-        --cache artifacts/icd11_cache.json --classifier <adapter dir> --db audit.sqlite
+        --cache artifacts/icd11_cache.json --classifier <adapter dir> --db audit.sqlite \\
+        --config config/config.yaml
+
+Stage-1 settings come from config.yaml's `thresholds:` block (src.detection.tune_stage1
+writes the values); the command-line options override it for experiments.
 """
 from __future__ import annotations
 
@@ -36,6 +48,7 @@ from src.classification.export import reference_text
 from src.data.preprocessing import FEATURE_COLUMNS, ClaimsPreprocessor
 from src.detection.autoencoder import AutoencoderDetector
 from src.detection.isolation_forest import IsolationForestDetector
+from src.detection.text_screen import TextConsistencyScreen
 from src.explainability.shap_explainer import SHAPExplainer
 from src.icd11.cache import ICD11Cache
 from src.reporting.report_generator import AuditReportGenerator
@@ -43,9 +56,11 @@ from src.reporting.repository import AuditReportRepository
 
 logger = logging.getLogger(__name__)
 
-# Provisional until Sprint 6 tuning: the contamination Isolation Forest's validation
-# tuning selected on every seed (TC-023).
+# Used only when neither config.yaml nor the command line sets a value: the contamination
+# Isolation Forest's F1 tuning selected on every seed (TC-023).
 DEFAULT_CONTAMINATION = 0.05
+STRUCTURED_SOURCES = {"isolation_forest", "autoencoder"}
+LANES = ("text_inconsistent", "structural_anomaly")
 NARRATIVE_ATTEMPTS = 3  # NFR-02: fixed retry count, then the failure is logged
 
 
@@ -57,24 +72,29 @@ class Stage1:
     autoencoder: AutoencoderDetector
     autoencoder_threshold: float
     explainer: SHAPExplainer
+    screen: TextConsistencyScreen | None = None
 
 
 def fit_stage1(train: pd.DataFrame, contamination: float = DEFAULT_CONTAMINATION,
-               seed: int = 42, background_size: int = 20) -> Stage1:
+               seed: int = 42, background_size: int = 20, autoencoder_quantile: float | None = None,
+               screen: TextConsistencyScreen | None = None) -> Stage1:
     """Fits the preprocessing and both detectors on the training split. Isolation Forest's
     contamination is a quantile of its training scores; the autoencoder's threshold is
-    set at the same quantile of its own training reconstruction errors, so both flag the
-    same share of training claims."""
+    the `autoencoder_quantile` of its own training reconstruction errors (by default
+    1 - contamination, so both flag the same share of training claims). `screen` is an
+    already fitted TextConsistencyScreen with a threshold, or None for no screen."""
+    if autoencoder_quantile is None:
+        autoencoder_quantile = 1 - contamination
     preprocessor = ClaimsPreprocessor()
     train_x = preprocessor.feature_matrix(preprocessor.align_schema(train), fit=True)
     forest = IsolationForestDetector(contamination=contamination, random_state=seed).fit(train_x)
     torch.manual_seed(seed)
     autoencoder = AutoencoderDetector(input_dim=train_x.shape[1]).fit(train_x)
-    threshold = float(np.quantile(autoencoder.score(train_x), 1 - contamination))
+    threshold = float(np.quantile(autoencoder.score(train_x), autoencoder_quantile))
     # A k-means summary of the training data keeps KernelSHAP's cost per claim small.
     background = shap.kmeans(train_x, background_size)
     explainer = SHAPExplainer(forest, FEATURE_COLUMNS, background)
-    return Stage1(preprocessor, forest, autoencoder, threshold, explainer)
+    return Stage1(preprocessor, forest, autoencoder, threshold, explainer, screen)
 
 
 @dataclass
@@ -90,6 +110,10 @@ class RunLog:
         return {
             "claims": len(self.claims),
             "flagged_stage1": len(flagged),
+            "flagged_by": {source: sum(source in c["flag_sources"] for c in flagged)
+                           for source in ("isolation_forest", "autoencoder", "text_screen")},
+            "reported": {lane: sum(c.get("lane") == lane for c in flagged) for lane in LANES},
+            "screen_false_positives": sum(1 for c in flagged if not c.get("reported")),
             "inconsistent": len(inconsistent),
             "narratives": sum(1 for c in inconsistent if c.get("narrative_ok")),
             "narrative_failures": self.narrative_failures,
@@ -118,7 +142,9 @@ class AuditPipeline:
         forest_flag = s1.isolation_forest.model.predict(features) == -1
         forest_score = s1.isolation_forest.score(features)
         autoencoder_score = s1.autoencoder.score(features)
-        flagged = forest_flag | (autoencoder_score >= s1.autoencoder_threshold)
+        autoencoder_flag = autoencoder_score >= s1.autoencoder_threshold
+        screen_flag = s1.screen.flag(aligned) if s1.screen is not None else np.zeros(len(aligned), bool)
+        flagged = forest_flag | autoencoder_flag | screen_flag
 
         flagged_rows = np.flatnonzero(flagged)
         attributions = s1.explainer.explain(features[flagged_rows]) if len(flagged_rows) else []
@@ -130,19 +156,26 @@ class AuditPipeline:
                 "isolation_forest_score": round(float(forest_score[i]), 4),
                 "autoencoder_score": round(float(autoencoder_score[i]), 4),
                 "flagged": bool(flagged[i]),
+                "flag_sources": [name for name, hit in (("isolation_forest", forest_flag[i]),
+                                                        ("autoencoder", autoencoder_flag[i]),
+                                                        ("text_screen", screen_flag[i])) if hit],
             }
             log.claims.append(entry)
             if flagged[i]:
-                entry.update(self._audit(claim, attribution_by_row[i], float(forest_score[i]), log))
+                entry.update(self._audit(claim, attribution_by_row[i], float(forest_score[i]),
+                                         entry["flag_sources"], log))
         return log
 
-    def _audit(self, claim, attribution: dict, anomaly_score: float, log: RunLog) -> dict:
+    def _audit(self, claim, attribution: dict, anomaly_score: float, sources: list[str],
+               log: RunLog) -> dict:
         """Stage 2 for one flagged claim: classifier verdict, then a narrative only if
-        the verdict is inconsistent. Every flagged claim gets a report; a consistent
-        verdict is a logged false positive with no narrative."""
+        the verdict is inconsistent, and a report in the lane the verdict and the flag
+        sources imply (module docstring). A screen-only flag with consistent notes is a
+        logged false positive: verdict saved, no report."""
         definition = self.cache.get(claim.icd11_code)
         reference = reference_text(definition)
         claim_id = self.repository.save_claim({
+            "claim_ref": str(claim.claim_id),
             "provider_id": claim.provider_id,
             "patient_ref": claim.member_id,
             "icd11_code": claim.icd11_code,
@@ -155,13 +188,20 @@ class AuditPipeline:
         verdict = self.classifier.predict(str(claim_id), claim.clinical_notes, reference)
         verdict_id = self.repository.save_verdict(claim_id, verdict.verdict, verdict.confidence,
                                                   verdict.model_version)
+        result = {"db_claim_id": claim_id, "verdict": verdict.verdict,
+                  "confidence": round(verdict.confidence, 4), "shap": attribution}
+        if verdict.verdict == "inconsistent":
+            lane = "text_inconsistent"
+        elif STRUCTURED_SOURCES.intersection(sources):
+            lane = "structural_anomaly"
+        else:
+            return result | {"reported": False, "lane": None, "report_id": None, "narrative_ok": False}
         narrative = None
-        if verdict.verdict == "inconsistent" and self.narrator is not None:
+        if lane == "text_inconsistent" and self.narrator is not None:
             narrative = self._narrate(claim.clinical_notes, verdict, reference, log)
-        report_id = self.reports.assemble_and_save(claim_id, verdict_id, attribution, narrative)
-        return {"db_claim_id": claim_id, "report_id": report_id, "verdict": verdict.verdict,
-                "confidence": round(verdict.confidence, 4), "shap": attribution,
-                "narrative_ok": narrative is not None}
+        report_id = self.reports.assemble_and_save(claim_id, verdict_id, attribution, narrative, sources)
+        return result | {"reported": True, "lane": lane, "report_id": report_id,
+                         "narrative_ok": narrative is not None}
 
     def _narrate(self, notes: str, verdict, reference: str, log: RunLog) -> str | None:
         for attempt in range(1, NARRATIVE_ATTEMPTS + 1):
@@ -181,14 +221,40 @@ def evaluate_run(log: RunLog, claims: pd.DataFrame) -> dict:
     rows = pd.DataFrame(log.claims).set_index("claim_ref").join(truth[["is_fraud", "label", "fraud_typology"]])
     flagged = rows["flagged"]
     caught = flagged & (rows.get("verdict") == "inconsistent")
+    reported = rows["reported"].fillna(False).astype(bool) if "reported" in rows else flagged & False
+    fraud = rows["is_fraud"] == 1
     return {
-        "fraud_claims": int(rows["is_fraud"].sum()),
-        "stage1_recall": round(float(flagged[rows["is_fraud"] == 1].mean()), 4),
-        "stage1_flagged_clean": int((flagged & (rows["is_fraud"] == 0)).sum()),
+        "fraud_claims": int(fraud.sum()),
+        "stage1_recall": round(float(flagged[fraud].mean()), 4),
+        "stage1_flagged_clean": int((flagged & ~fraud).sum()),
+        "end_to_end_recall": round(float(reported[fraud].mean()), 4),
+        "reported_clean": int((reported & ~fraud).sum()),
         "inconsistent_caught": int((caught & (rows["label"] == "inconsistent")).sum()),
         "inconsistent_total": int((rows["label"] == "inconsistent").sum()),
         "flagged_by_typology": flagged.groupby(rows["fraud_typology"]).agg(["size", "sum"])
                                       .astype(int).to_dict(orient="index"),
+        "reported_by_typology": reported.groupby(rows["fraud_typology"]).agg(["size", "sum"])
+                                        .astype(int).to_dict(orient="index"),
+    }
+
+
+def run_predictions(log: RunLog) -> dict[str, pd.DataFrame]:
+    """The run in the shared prediction format (src.evaluation.predictions): "pipeline"
+    flags every claim that reached an auditor lane; "pipeline_text_lane" only the
+    text-inconsistent lane, scored by the classifier's probability of "inconsistent"
+    (0 for claims the classifier never saw)."""
+    rows = pd.DataFrame(log.claims)
+    reported = rows["reported"].fillna(False).astype(bool) if "reported" in rows else rows["flagged"] & False
+    verdict = rows.get("verdict", pd.Series(index=rows.index, dtype=object))
+    confidence = rows.get("confidence", pd.Series(index=rows.index, dtype=float))
+    p_inconsistent = np.where(verdict == "inconsistent", confidence,
+                              np.where(verdict == "consistent", 1 - confidence, 0.0))
+    claim_id = rows["claim_ref"].astype(str)
+    return {
+        "pipeline": pd.DataFrame({"claim_id": claim_id, "flagged": reported.astype(int)}),
+        "pipeline_text_lane": pd.DataFrame({"claim_id": claim_id,
+                                            "flagged": (verdict == "inconsistent").astype(int),
+                                            "score": p_inconsistent}),
     }
 
 
@@ -204,7 +270,14 @@ def main() -> None:
     parser.add_argument("--allow-untrained", action="store_true",
                         help="run with the untrained base model (wiring checks only)")
     parser.add_argument("--db", required=True, help="SQLite database the dashboard reads")
-    parser.add_argument("--contamination", type=float, default=DEFAULT_CONTAMINATION)
+    parser.add_argument("--config", type=Path, help="config.yaml whose thresholds: block sets stage 1")
+    parser.add_argument("--contamination", type=float, help="overrides the config value")
+    parser.add_argument("--autoencoder-quantile", type=float, help="overrides the config value")
+    parser.add_argument("--screen-threshold", type=float, help="overrides the config value")
+    parser.add_argument("--no-text-screen", action="store_true",
+                        help="stage 1 without the text screen (the original funnel)")
+    parser.add_argument("--predictions", type=Path, nargs="?", const=Path("experiments/predictions"),
+                        help="also write the run in the shared prediction format under this root")
     parser.add_argument("--llm-provider", default="vllm", choices=["vllm", "huggingface", "openai"])
     parser.add_argument("--llm-model", help="e.g. hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4; "
                                             "omit to skip narratives")
@@ -227,8 +300,24 @@ def main() -> None:
     if args.limit:
         batch = batch.head(args.limit)
 
+    thresholds = {}
+    if args.config:
+        from src.config import load_config
+        thresholds = load_config(args.config).get("thresholds") or {}
+    contamination = first_set(args.contamination, thresholds.get("isolation_forest_contamination"),
+                              DEFAULT_CONTAMINATION)
+    quantile = first_set(args.autoencoder_quantile, thresholds.get("autoencoder_train_quantile"))
+    screen_threshold = first_set(args.screen_threshold, thresholds.get("text_screen_threshold"))
+    cache = ICD11Cache(args.cache)
+    screen = None
+    if not args.no_text_screen:
+        if screen_threshold is None:
+            parser.error("no text_screen_threshold in --config or --screen-threshold "
+                         "(run src.detection.tune_stage1), or pass --no-text-screen")
+        screen = TextConsistencyScreen(cache, screen_threshold).fit(train)
+
     print(f"Fitting stage 1 on {len(train)} training claims...")
-    stage1 = fit_stage1(train, args.contamination, args.seed)
+    stage1 = fit_stage1(train, contamination, args.seed, autoencoder_quantile=quantile, screen=screen)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     classifier = SemanticConsistencyClassifier(str(args.classifier or "untrained"), args.base_model, device)
     narrator = None
@@ -236,9 +325,10 @@ def main() -> None:
         from src.narrative.narrative_generator import AuditNarrativeGenerator
         narrator = AuditNarrativeGenerator(args.llm_provider, args.llm_model)
 
-    pipeline = AuditPipeline(stage1, classifier, ICD11Cache(args.cache),
-                             AuditReportRepository(args.db), narrator)
-    settings = {k: str(v) for k, v in vars(args).items()} | {"classifier_version": classifier.model_version}
+    pipeline = AuditPipeline(stage1, classifier, cache, AuditReportRepository(args.db), narrator)
+    settings = {k: str(v) for k, v in vars(args).items()} | {
+        "classifier_version": classifier.model_version, "contamination": contamination,
+        "autoencoder_threshold": stage1.autoencoder_threshold, "screen_threshold": screen_threshold}
     log = pipeline.run(batch, settings)
 
     record = {"started_at": log.started_at, "settings": log.settings, "summary": log.summary(),
@@ -248,6 +338,14 @@ def main() -> None:
     out.write_text(json.dumps(record, indent=2, default=str))
     print(json.dumps({"summary": record["summary"], "evaluation": record["evaluation"]}, indent=2))
     print(f"-> {out}")
+    if args.predictions:
+        from src.evaluation.predictions import write_predictions
+        for system, frame in run_predictions(log).items():
+            print(f"-> {write_predictions(system, args.batch, frame, args.predictions)}")
+
+
+def first_set(*values):
+    return next((v for v in values if v is not None), None)
 
 
 if __name__ == "__main__":

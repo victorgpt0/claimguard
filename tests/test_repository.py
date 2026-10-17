@@ -45,3 +45,27 @@ def test_record_decision_rejects_invalid_status(tmp_db_path):
         assert False, "expected ValueError"
     except ValueError:
         pass
+
+
+def test_old_database_gains_new_columns(tmp_path):
+    """Databases written before claim_ref and flag_sources (e.g. the TC-028 run) still open."""
+    import sqlite3
+    path = str(tmp_path / "old.sqlite")
+    with sqlite3.connect(path) as conn:
+        conn.executescript("""
+            CREATE TABLE Claim (id INTEGER PRIMARY KEY AUTOINCREMENT, provider_id TEXT NOT NULL,
+                patient_ref TEXT NOT NULL, icd11_code TEXT NOT NULL, claim_amount REAL NOT NULL,
+                service_date DATE NOT NULL, discharge_date DATE, clinical_notes TEXT NOT NULL,
+                anomaly_score REAL);
+            CREATE TABLE AuditReport (id INTEGER PRIMARY KEY AUTOINCREMENT, claim_id INTEGER NOT NULL,
+                verdict_id INTEGER, shap_attribution TEXT, llm_narrative TEXT,
+                status TEXT NOT NULL DEFAULT 'pending', reviewed_by INTEGER, reviewed_at DATETIME,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);""")
+    repository = AuditReportRepository(path)
+    claim_id = repository.save_claim({"claim_ref": "C-17", "provider_id": "P1", "patient_ref": "M1",
+                                      "icd11_code": "JB20", "claim_amount": 0.0,
+                                      "service_date": "2025-11-01", "clinical_notes": "Delivered."})
+    report_id = repository.save_report(claim_id, None, {"a": 1.0}, None, ["isolation_forest"])
+    report = repository.get_report(report_id)
+    assert report["claim_ref"] == "C-17"
+    assert report["flag_sources"] == '["isolation_forest"]'

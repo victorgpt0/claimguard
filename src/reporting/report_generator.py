@@ -12,8 +12,10 @@ class AuditReportGenerator:
         self.repository = repository
 
     def assemble_and_save(self, claim_id: int, verdict_id: int | None,
-                           shap_attribution: dict, llm_narrative: str | None) -> int:
+                           shap_attribution: dict, llm_narrative: str | None,
+                           flag_sources: list[str] | None = None) -> int:
         """`llm_narrative` is None for 'consistent' verdicts (false positive, logged) —
         the LLM is never invoked for those (Section 2.5's classifier-gates-the-LLM
         guarantee)."""
-        return self.repository.save_report(claim_id, verdict_id, shap_attribution, llm_narrative)
+        return self.repository.save_report(claim_id, verdict_id, shap_attribution, llm_narrative,
+                                           flag_sources)

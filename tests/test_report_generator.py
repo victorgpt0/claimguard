@@ -13,4 +13,4 @@ def test_assemble_and_save_delegates_to_repository():
     )
 
     assert report_id == 42
-    fake_repo.save_report.assert_called_once_with(1, 2, {"claim_amount": 0.5}, "explanation")
+    fake_repo.save_report.assert_called_once_with(1, 2, {"claim_amount": 0.5}, "explanation", None)

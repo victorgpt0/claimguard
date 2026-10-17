@@ -201,6 +201,12 @@ def funnel_chart(run: dict):
         st.caption("Log scale.")
     with right:
         by_typology = evaluation.get("flagged_by_typology")
+        reported = summary.get("reported")
+        if reported:
+            st.caption(f"Queued for review: {reported['text_inconsistent']} text inconsistent, "
+                       f"{reported['structural_anomaly']} structural anomaly; "
+                       f"{summary.get('screen_false_positives', 0)} text-screen flags the "
+                       "classifier cleared were logged only.")
         if by_typology:
             frame = pd.DataFrame([
                 {"typology": TYPOLOGY_NAMES.get(t, t), "share flagged": v["sum"] / v["size"],
@@ -221,6 +227,12 @@ def funnel_chart(run: dict):
 
 # --- Review queue -----------------------------------------------------------------------
 
+# Review lanes (#46, src/pipeline.py): the lane follows from the classifier's verdict.
+LANES = {"Text inconsistent": "inconsistent", "Structural anomaly": "consistent"}
+LANE_OF_VERDICT = {verdict: lane for lane, verdict in LANES.items()}
+SOURCE_NAMES = {"isolation_forest": "Isolation Forest", "autoencoder": "autoencoder",
+                "text_screen": "text-consistency screen"}
+
 def review_tab(repository: AuditReportRepository, config: dict):
     pending = pd.DataFrame(repository.get_all_reports())
     pending = pending[pending["status"] == "pending"] if not pending.empty else pending
@@ -229,17 +241,20 @@ def review_tab(repository: AuditReportRepository, config: dict):
         return
 
     filters = st.columns([2, 2, 3])
-    verdict = filters[0].selectbox("Verdict", ["all", "inconsistent", "consistent"])
+    lane = filters[0].selectbox("Lane", ["All", *LANES],
+                                help="Text inconsistent: the notes do not support the billed code. "
+                                     "Structural anomaly: the notes are consistent, but the billing "
+                                     "fields look anomalous.")
     order = filters[1].selectbox("Order", ["Highest anomaly score", "Oldest first"])
-    if verdict != "all":
-        pending = pending[pending["verdict"] == verdict]
+    if lane != "All":
+        pending = pending[pending["verdict"] == LANES[lane]]
     if order == "Highest anomaly score":
         pending = pending.sort_values("anomaly_score", ascending=False)
     if pending.empty:
         st.info("No pending reports match.")
         return
 
-    labels = {f"#{r.id} · {r.verdict or 'no verdict'} · {r.provider_id} · {r.icd11_code}": r.id
+    labels = {f"#{r.id} · {LANE_OF_VERDICT.get(r.verdict, 'no verdict')} · {r.provider_id} · {r.icd11_code}": r.id
               for r in pending.itertuples()}
     selected = filters[2].selectbox(f"Report ({len(labels)} pending)", list(labels))
     report = repository.get_report(labels[selected])
@@ -314,6 +329,9 @@ def shap_panel(report: dict):
         st.caption(f"Output: anomaly score {report.get('anomaly_score') or 0:.3f} from the anomaly "
                    "detectors, with SHAP's top 3 contributing fields. Red pushes the claim towards "
                    "anomalous, blue away.")
+        sources = json.loads(report.get("flag_sources") or "null")
+        if sources:
+            st.markdown("Flagged by: " + ", ".join(SOURCE_NAMES.get(s, s) for s in sources))
         attribution = json.loads(report["shap_attribution"] or "{}")
         if attribution:
             frame = pd.DataFrame({"feature": list(attribution), "shap": list(attribution.values())})
@@ -351,7 +369,8 @@ def narrative_panel(report: dict):
         elif report.get("verdict") == "consistent":
             st.info("No narrative: the classifier found the notes consistent with the billed "
                     "code, and narratives are written only for inconsistent verdicts. The claim "
-                    "is here because its structured fields looked anomalous (panel 4).")
+                    "is in the structural-anomaly lane because its billing fields looked "
+                    "anomalous (panel 4).")
         else:
             st.warning("No narrative: generation failed or no LLM was available for this run.")
 

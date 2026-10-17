@@ -25,6 +25,11 @@ class AuditReportRepository:
         if ensure_schema:
             with self._connect() as conn:
                 conn.executescript(SCHEMA_PATH.read_text())
+                # Databases created before these columns existed (e.g. the TC-028 run).
+                for table, column in (("AuditReport", "flag_sources"), ("Claim", "claim_ref")):
+                    columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+                    if column not in columns:
+                        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} TEXT")
 
     @contextmanager
     def _connect(self):
@@ -39,10 +44,10 @@ class AuditReportRepository:
     def save_claim(self, claim: dict) -> int:
         with self._connect() as conn:
             cursor = conn.execute(
-                """INSERT INTO Claim (provider_id, patient_ref, icd11_code, claim_amount,
+                """INSERT INTO Claim (claim_ref, provider_id, patient_ref, icd11_code, claim_amount,
                    service_date, discharge_date, clinical_notes, anomaly_score)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (claim["provider_id"], claim["patient_ref"], claim["icd11_code"],
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (claim.get("claim_ref"), claim["provider_id"], claim["patient_ref"], claim["icd11_code"],
                  claim["claim_amount"], claim["service_date"], claim.get("discharge_date"),
                  claim["clinical_notes"], claim.get("anomaly_score")),
             )
@@ -59,13 +64,14 @@ class AuditReportRepository:
             return cursor.lastrowid
 
     def save_report(self, claim_id: int, verdict_id: int | None, shap_attribution: dict,
-                     llm_narrative: str | None) -> int:
+                     llm_narrative: str | None, flag_sources: list[str] | None = None) -> int:
         """FR-07: persist a newly assembled AuditReport. Returns the new report_id."""
         with self._connect() as conn:
             cursor = conn.execute(
                 """INSERT INTO AuditReport (claim_id, verdict_id, shap_attribution,
-                   llm_narrative, status) VALUES (?, ?, ?, ?, 'pending')""",
-                (claim_id, verdict_id, json.dumps(shap_attribution), llm_narrative),
+                   llm_narrative, flag_sources, status) VALUES (?, ?, ?, ?, ?, 'pending')""",
+                (claim_id, verdict_id, json.dumps(shap_attribution), llm_narrative,
+                 None if flag_sources is None else json.dumps(flag_sources)),
             )
             return cursor.lastrowid
 
@@ -83,7 +89,8 @@ class AuditReportRepository:
         """Every report with its claim and verdict, for the dashboard's statistics."""
         with self._connect() as conn:
             rows = conn.execute(
-                """SELECT r.id, r.status, r.shap_attribution, r.llm_narrative IS NOT NULL AS has_narrative,
+                """SELECT r.id, r.status, r.shap_attribution, r.flag_sources,
+                          r.llm_narrative IS NOT NULL AS has_narrative,
                           r.created_at, r.reviewed_at, c.provider_id, c.icd11_code, c.claim_amount,
                           c.anomaly_score, v.verdict, v.confidence
                    FROM AuditReport r
@@ -97,7 +104,7 @@ class AuditReportRepository:
         """FR-08: full detail view for a single report."""
         with self._connect() as conn:
             row = conn.execute(
-                """SELECT r.*, c.provider_id, c.patient_ref, c.icd11_code, c.claim_amount,
+                """SELECT r.*, c.claim_ref, c.provider_id, c.patient_ref, c.icd11_code, c.claim_amount,
                           c.service_date, c.discharge_date, c.clinical_notes, c.anomaly_score,
                           v.verdict, v.confidence, v.model_version
                    FROM AuditReport r

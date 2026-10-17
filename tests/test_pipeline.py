@@ -1,13 +1,17 @@
 """AuditPipeline orchestration with fake classifier and narrator: checks the funnel's
 gating (only flagged claims reach the classifier, only inconsistent verdicts reach the
 LLM), the NFR-02 retry-then-log behaviour, and what is persisted."""
+import dataclasses
+import json
+
+import numpy as np
 import pandas as pd
 import pytest
 
 from src.classification.classifier import ClassifierVerdict
 from src.data.generator import GeneratorConfig, generate_base_claims, load_catalogue
 from src.icd11.client import ICD11Definition
-from src.pipeline import AuditPipeline, evaluate_run, fit_stage1
+from src.pipeline import AuditPipeline, evaluate_run, fit_stage1, run_predictions
 from src.reporting.repository import AuditReportRepository
 
 
@@ -62,6 +66,18 @@ def _pipeline(stage1, tmp_path, narrator):
     return AuditPipeline(stage1, classifier, _FakeCache(), repository, narrator), classifier, repository
 
 
+class _FakeScreen:
+    """Flags every fifth claim of the batch, whatever its notes say."""
+    def flag(self, claims):
+        return np.arange(len(claims)) % 5 == 0
+
+
+class _ConsistentClassifier(_FakeClassifier):
+    def predict(self, claim_id, clinical_notes, icd11_definition):
+        self.seen.append(claim_id)
+        return ClassifierVerdict(claim_id, "consistent", 0.8, "fake-v1")
+
+
 def test_only_flagged_claims_reach_the_classifier_and_get_reports(stage1, data, tmp_path, monkeypatch):
     monkeypatch.setattr("src.pipeline.time.sleep", lambda s: None)
     pipeline, classifier, repository = _pipeline(stage1, tmp_path, _FlakyNarrator(0))
@@ -70,6 +86,48 @@ def test_only_flagged_claims_reach_the_classifier_and_get_reports(stage1, data, 
     assert 0 < len(flagged) < len(data[1])
     assert len(classifier.seen) == len(flagged)
     assert len(repository.get_pending_reports()) == len(flagged)
+
+
+def test_screen_only_flags_with_consistent_notes_are_not_queued(stage1, data, tmp_path):
+    """#46: a screen-only flag the classifier finds consistent is a logged false
+    positive; a structured-detector flag with consistent notes is queued in the
+    structural-anomaly lane."""
+    classifier = _ConsistentClassifier()
+    repository = AuditReportRepository(str(tmp_path / "audit.sqlite"))
+    pipeline = AuditPipeline(dataclasses.replace(stage1, screen=_FakeScreen()), classifier,
+                             _FakeCache(), repository)
+    log = pipeline.run(data[1])
+    flagged = [c for c in log.claims if c["flagged"]]
+    screen_only = [c for c in flagged if c["flag_sources"] == ["text_screen"]]
+    structural = [c for c in flagged if set(c["flag_sources"]) & {"isolation_forest", "autoencoder"}]
+    assert screen_only and structural
+    assert len(classifier.seen) == len(flagged)  # every flag still reaches the classifier
+    assert not any(c["reported"] for c in screen_only)
+    assert all(c["reported"] and c["lane"] == "structural_anomaly" for c in structural)
+    assert len(repository.get_pending_reports()) == len(structural)
+    report = repository.get_report(structural[0]["report_id"])
+    assert json.loads(report["flag_sources"]) == structural[0]["flag_sources"]
+    assert log.summary()["screen_false_positives"] == len(screen_only)
+
+
+def test_inconsistent_verdicts_go_to_the_text_lane(stage1, data, tmp_path):
+    pipeline, _, _ = _pipeline(dataclasses.replace(stage1, screen=_FakeScreen()), tmp_path, None)
+    log = pipeline.run(data[1])
+    for entry in (c for c in log.claims if c["flagged"]):
+        if entry["verdict"] == "inconsistent":
+            assert entry["reported"] and entry["lane"] == "text_inconsistent"
+
+
+def test_run_predictions_shared_format(stage1, data, tmp_path):
+    pipeline, _, _ = _pipeline(stage1, tmp_path, None)
+    log = pipeline.run(data[1])
+    predictions = run_predictions(log)
+    full, text = predictions["pipeline"], predictions["pipeline_text_lane"]
+    assert len(full) == len(text) == len(data[1])
+    assert full["flagged"].sum() == sum(bool(c.get("reported")) for c in log.claims)
+    assert text["flagged"].sum() == sum(c.get("verdict") == "inconsistent" for c in log.claims)
+    unseen = [not c["flagged"] for c in log.claims]
+    assert (text.loc[unseen, "score"] == 0).all()
 
 
 def test_narrative_only_for_inconsistent_verdicts(stage1, data, tmp_path, monkeypatch):
@@ -103,3 +161,4 @@ def test_evaluate_run_reports_stage1_recall(stage1, data, tmp_path):
     result = evaluate_run(pipeline.run(batch), batch)
     assert result["fraud_claims"] == int(batch["is_fraud"].sum())
     assert 0.0 <= result["stage1_recall"] <= 1.0
+    assert result["end_to_end_recall"] <= result["stage1_recall"]

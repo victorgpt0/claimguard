@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS User (
 
 CREATE TABLE IF NOT EXISTS Claim (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    claim_ref       TEXT,   -- the submitter's own claim id (the dataset's claim_id)
     provider_id     TEXT NOT NULL,
     patient_ref     TEXT NOT NULL,
     icd11_code      TEXT NOT NULL,
@@ -35,7 +36,8 @@ CREATE TABLE IF NOT EXISTS AuditReport (
     claim_id         INTEGER NOT NULL REFERENCES Claim(id),
     verdict_id       INTEGER REFERENCES ClassifierVerdict(id),
     shap_attribution TEXT,   -- JSON-encoded SHAP attribution dictionary
-    llm_narrative    TEXT,   -- NULL when verdict is 'consistent' (false positive, logged)
+    llm_narrative    TEXT,   -- NULL when verdict is 'consistent' (structural-anomaly lane)
+    flag_sources     TEXT,   -- JSON list of the stage-1 components that flagged the claim
     status           TEXT NOT NULL DEFAULT 'pending'
                      CHECK (status IN ('pending', 'approved', 'rejected', 'escalated')),
     reviewed_by      INTEGER REFERENCES User(id),
