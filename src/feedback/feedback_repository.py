@@ -42,13 +42,14 @@ class FeedbackRepository:
         self._consumed_marker_path = self.feedback_dataset_path.with_suffix(".consumed")
 
     def materialize_example(self, claim: dict, verdict: dict, auditor_decision: str,
-                            icd11_definition: str) -> bool:
+                            icd11_definition: str, extra: dict | None = None) -> bool:
         """auditor_decision: 'approved' (confirmed fraud) | 'rejected' (confirmed false
         positive). Writes one labeled example in train.py's input format (the exported
         JSONL of src.classification.export), so feedback can be appended to a training
         split as it is. Returns False when the decision implies no label (see
         feedback_label). Escalate produces no feedback example (FR-12 scope) — callers
-        should not invoke this for escalations."""
+        should not invoke this for escalations. `extra` adds fields to the example, e.g.
+        {"simulated": True} for decisions taken from ground truth rather than an auditor."""
         if auditor_decision not in FEEDBACK_DECISIONS:
             raise ValueError(
                 f"No feedback example is materialised for decision {auditor_decision!r}; "
@@ -65,6 +66,7 @@ class FeedbackRepository:
             "label": label,
             "classifier_verdict": verdict.get("verdict"),
             "auditor_decision": auditor_decision,
+            **(extra or {}),
         }
         with self.feedback_dataset_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(example) + "\n")
@@ -76,10 +78,12 @@ class FeedbackRepository:
         with self.feedback_dataset_path.open(encoding="utf-8") as f:
             return sum(1 for _ in f)
 
+    def consumed_count(self) -> int:
+        return int(self._consumed_marker_path.read_text()) if self._consumed_marker_path.exists() else 0
+
     def count_unconsumed_examples(self) -> int:
         """IR-06: used by ClassifierRetrainer to check FR-13's trigger threshold."""
-        consumed = int(self._consumed_marker_path.read_text()) if self._consumed_marker_path.exists() else 0
-        return self.total_example_count() - consumed
+        return self.total_example_count() - self.consumed_count()
 
     def mark_consumed(self, up_to_count: int | None = None) -> None:
         """Called by ClassifierRetrainer once it has kicked off a retraining job for the
@@ -97,5 +101,16 @@ class FeedbackRepository:
             all_examples = [json.loads(line) for line in f]
         if not since_consumed_marker:
             return all_examples
-        consumed = int(self._consumed_marker_path.read_text()) if self._consumed_marker_path.exists() else 0
-        return all_examples[consumed:]
+        return all_examples[self.consumed_count():]
+
+    def take_unconsumed(self) -> list[dict]:
+        """The unconsumed examples, marked consumed in the same step (#48: a retraining run
+        resets the trigger when it starts). The marker moves only past the lines read here,
+        so an example appended while the run trains is left for the next run."""
+        if not self.feedback_dataset_path.exists():
+            return []
+        with self.feedback_dataset_path.open(encoding="utf-8") as f:
+            all_examples = [json.loads(line) for line in f]
+        examples = all_examples[self.consumed_count():]
+        self.mark_consumed(up_to_count=len(all_examples))
+        return examples

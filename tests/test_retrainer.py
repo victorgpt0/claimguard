@@ -1,3 +1,4 @@
+import pytest
 from unittest.mock import MagicMock, patch
 
 from src.feedback.feedback_repository import FeedbackRepository
@@ -69,3 +70,51 @@ def test_evaluate_and_promote_rejects_worse_candidate(tmp_path):
     assert promoted is False
     assert (active_dir / "adapter_model.bin").read_text() == "active weights"  # unchanged
     assert (candidates_holding_dir / "candidate_checkpoint" / "adapter_model.bin").exists()
+
+
+def test_evaluate_and_promote_exposes_the_compared_metrics(tmp_path):
+    repo = _feedback_repo(tmp_path)
+    active_dir = tmp_path / "active"
+    active_dir.mkdir()
+    (active_dir / "adapter_model.bin").write_text("active weights")
+    candidate_dir = tmp_path / "candidate_checkpoint"
+    candidate_dir.mkdir()
+    (candidate_dir / "adapter_model.bin").write_text("candidate weights")
+
+    retrainer = ClassifierRetrainer(repo, str(active_dir), str(tmp_path / "candidates"))
+    assert retrainer.last_result is None
+    metrics_by_call = iter([{"f1": 0.9, "recall": 0.9}, {"f1": 0.8, "recall": 0.9}])
+    with patch("src.classification.classifier.SemanticConsistencyClassifier"), \
+         patch.object(ClassifierRetrainer, "_evaluate_on_test_set",
+                       side_effect=lambda *a, **k: next(metrics_by_call)):
+        promoted = retrainer.evaluate_and_promote(str(candidate_dir), held_out_test_examples=[])
+
+    assert promoted is True
+    assert retrainer.last_result == {"candidate_metrics": {"f1": 0.9, "recall": 0.9},
+                                     "active_metrics": {"f1": 0.8, "recall": 0.9},
+                                     "promoted": True}
+
+
+def test_evaluate_and_promote_reports_no_active_metrics_when_none_deployed(tmp_path):
+    repo = _feedback_repo(tmp_path)
+    candidate_dir = tmp_path / "candidate_checkpoint"
+    candidate_dir.mkdir()
+    (candidate_dir / "adapter_model.bin").write_text("weights")
+    retrainer = ClassifierRetrainer(repo, str(tmp_path / "active"), str(tmp_path / "candidates"))
+    with patch("src.classification.classifier.SemanticConsistencyClassifier"), \
+         patch.object(ClassifierRetrainer, "_evaluate_on_test_set",
+                       return_value={"f1": 0.0, "recall": 0.0}):
+        assert retrainer.evaluate_and_promote(str(candidate_dir), held_out_test_examples=[]) is True
+    assert retrainer.last_result["active_metrics"] is None
+
+
+def test_evaluate_on_test_set_returns_plain_floats(tmp_path):
+    retrainer = ClassifierRetrainer(_feedback_repo(tmp_path), str(tmp_path / "active"),
+                                    str(tmp_path / "candidates"))
+    classifier = MagicMock()
+    classifier.predict.side_effect = lambda *a: MagicMock(verdict="inconsistent")
+    examples = [{"clinical_notes": "n", "icd11_definition": "d", "label": "inconsistent"},
+                {"clinical_notes": "n", "icd11_definition": "d", "label": "consistent"}]
+    metrics = retrainer._evaluate_on_test_set(classifier, examples)
+    assert metrics == {"f1": pytest.approx(2 / 3), "recall": 1.0}
+    assert type(metrics["f1"]) is float

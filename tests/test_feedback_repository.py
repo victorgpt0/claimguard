@@ -59,3 +59,26 @@ def test_count_unconsumed_examples_and_mark_consumed(repo):
                              {"verdict": "consistent"}, "rejected", icd11_definition="Typhoid")
     assert repo.count_unconsumed_examples() == 1
     assert json.loads(repo.feedback_dataset_path.read_text().splitlines()[-1])["label"] == "consistent"
+
+
+def test_extra_fields_are_added_to_the_example(repo):
+    repo.materialize_example(CLAIM, {"verdict": "inconsistent"}, "rejected", "Cholera",
+                             extra={"simulated": True})
+    assert repo.read_examples()[0]["simulated"] is True
+
+
+def test_take_unconsumed_marks_only_what_it_read(repo):
+    for _ in range(3):
+        repo.materialize_example(CLAIM, {"verdict": "inconsistent"}, "rejected", "Cholera")
+    repo.mark_consumed(up_to_count=1)
+    taken = repo.take_unconsumed()
+    assert len(taken) == 2
+    assert repo.count_unconsumed_examples() == 0
+    repo.materialize_example(CLAIM, {"verdict": "inconsistent"}, "approved", "Cholera")
+    assert repo.count_unconsumed_examples() == 1
+    assert [e["label"] for e in repo.take_unconsumed()] == ["inconsistent"]
+
+
+def test_take_unconsumed_without_dataset_is_empty(repo):
+    assert repo.take_unconsumed() == []
+    assert repo.consumed_count() == 0

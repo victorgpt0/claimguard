@@ -29,6 +29,10 @@ class ClassifierRetrainer:
         self.active_model_path = Path(active_model_path)
         self.candidate_dir = Path(candidate_dir)
         self.candidate_dir.mkdir(parents=True, exist_ok=True)
+        # The metrics behind the last evaluate_and_promote decision, for the retraining
+        # history (#47): {candidate_metrics, active_metrics (None if nothing was
+        # deployed), promoted}.
+        self.last_result: dict | None = None
 
     def maybe_trigger_retraining(self, trigger_count: int) -> bool:
         """IR-06: poll-on-event check appended to
@@ -47,7 +51,8 @@ class ClassifierRetrainer:
     def evaluate_and_promote(self, candidate_checkpoint_path: str,
                               held_out_test_examples: list[dict]) -> bool:
         """FR-14: promote only if candidate F1/recall >= active checkpoint's, both
-        measured on the SAME fixed held-out test set. Returns True if promoted."""
+        measured on the SAME fixed held-out test set. Returns True if promoted; the
+        metrics compared are kept in `last_result`."""
         # Imported here so the dashboard, which only runs the trigger check, never loads
         # torch and transformers.
         from src.classification.classifier import SemanticConsistencyClassifier
@@ -58,18 +63,19 @@ class ClassifierRetrainer:
         if self.active_model_path.exists() and any(self.active_model_path.iterdir()):
             active = SemanticConsistencyClassifier(str(self.active_model_path))
             active_metrics = self._evaluate_on_test_set(active, held_out_test_examples)
+            not_worse = (candidate_metrics["f1"] >= active_metrics["f1"]
+                         and candidate_metrics["recall"] >= active_metrics["recall"])
         else:
-            active_metrics = {"f1": -1.0, "recall": -1.0}  # nothing deployed yet — promote unconditionally
-
-        not_worse = (candidate_metrics["f1"] >= active_metrics["f1"]
-                     and candidate_metrics["recall"] >= active_metrics["recall"])
+            active_metrics = None
+            not_worse = True  # nothing deployed yet — promote unconditionally
+        self.last_result = {"candidate_metrics": candidate_metrics,
+                            "active_metrics": active_metrics, "promoted": not_worse}
 
         if not_worse:
             self._promote(candidate_checkpoint_path)
-            logger.info("Promoted candidate %s (F1=%.3f, recall=%.3f) over active "
-                        "(F1=%.3f, recall=%.3f).", candidate_checkpoint_path,
-                        candidate_metrics["f1"], candidate_metrics["recall"],
-                        active_metrics["f1"], active_metrics["recall"])
+            logger.info("Promoted candidate %s (F1=%.3f, recall=%.3f) over active %s.",
+                        candidate_checkpoint_path, candidate_metrics["f1"],
+                        candidate_metrics["recall"], active_metrics or "(none deployed)")
         else:
             self._retain_for_inspection(candidate_checkpoint_path)
             logger.info("Candidate %s scored worse than active — retained for "
@@ -88,8 +94,8 @@ class ClassifierRetrainer:
             predictions.append(verdict.verdict)
             labels.append(example["label"])
         return {
-            "f1": f1_score(labels, predictions, pos_label="inconsistent", zero_division=0),
-            "recall": recall_score(labels, predictions, pos_label="inconsistent", zero_division=0),
+            "f1": float(f1_score(labels, predictions, pos_label="inconsistent", zero_division=0)),
+            "recall": float(recall_score(labels, predictions, pos_label="inconsistent", zero_division=0)),
         }
 
     def _promote(self, candidate_checkpoint_path: str) -> None:
