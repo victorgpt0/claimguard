@@ -17,7 +17,22 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-DECISION_TO_LABEL = {"approved": "confirmed_fraud", "rejected": "confirmed_false_positive"}
+FEEDBACK_DECISIONS = {"approved", "rejected"}
+
+
+def feedback_label(auditor_decision: str, classifier_verdict: str | None) -> str | None:
+    """The classifier's training label implied by an auditor decision, in the same
+    consistent/inconsistent vocabulary train.py uses. A rejection means the claim is not
+    fraudulent, so its notes are consistent with the billed code. An approval confirms
+    a text inconsistency only when the classifier had called the claim inconsistent: an
+    approved claim the classifier called consistent was confirmed as fraud for another
+    reason (a stage-1 anomaly such as an anomalous dependent), which says nothing about
+    its notes, so it yields no example (None)."""
+    if auditor_decision == "rejected":
+        return "consistent"
+    if auditor_decision == "approved" and classifier_verdict == "inconsistent":
+        return "inconsistent"
+    return None
 
 
 class FeedbackRepository:
@@ -26,25 +41,34 @@ class FeedbackRepository:
         self.feedback_dataset_path.parent.mkdir(parents=True, exist_ok=True)
         self._consumed_marker_path = self.feedback_dataset_path.with_suffix(".consumed")
 
-    def materialize_example(self, claim: dict, verdict: dict, auditor_decision: str) -> None:
+    def materialize_example(self, claim: dict, verdict: dict, auditor_decision: str,
+                            icd11_definition: str) -> bool:
         """auditor_decision: 'approved' (confirmed fraud) | 'rejected' (confirmed false
-        positive). Writes one labeled example to the file-based Feedback Dataset.
-        Escalate produces no feedback example (FR-12 scope) — callers should not invoke
-        this for escalations."""
-        if auditor_decision not in DECISION_TO_LABEL:
+        positive). Writes one labeled example in train.py's input format (the exported
+        JSONL of src.classification.export), so feedback can be appended to a training
+        split as it is. Returns False when the decision implies no label (see
+        feedback_label). Escalate produces no feedback example (FR-12 scope) — callers
+        should not invoke this for escalations."""
+        if auditor_decision not in FEEDBACK_DECISIONS:
             raise ValueError(
                 f"No feedback example is materialised for decision {auditor_decision!r}; "
-                f"only {sorted(DECISION_TO_LABEL)} produce one (FR-12 scope)."
+                f"only {sorted(FEEDBACK_DECISIONS)} produce one (FR-12 scope)."
             )
+        label = feedback_label(auditor_decision, verdict.get("verdict"))
+        if label is None:
+            return False
         example = {
             "claim_id": claim["id"] if "id" in claim else claim.get("claim_id"),
-            "clinical_notes": claim["clinical_notes"],
             "icd11_code": claim["icd11_code"],
+            "clinical_notes": claim["clinical_notes"],
+            "icd11_definition": icd11_definition,
+            "label": label,
             "classifier_verdict": verdict.get("verdict"),
-            "label": DECISION_TO_LABEL[auditor_decision],
+            "auditor_decision": auditor_decision,
         }
         with self.feedback_dataset_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(example) + "\n")
+        return True
 
     def total_example_count(self) -> int:
         if not self.feedback_dataset_path.exists():

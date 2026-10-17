@@ -22,4 +22,10 @@ def load_config(config_path: str | Path | None = None) -> dict:
         raise FileNotFoundError(
             f"{config_path} not found — copy config/config.example.yaml to config/config.yaml first."
         )
-    return yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    # Relative paths (a laptop config: db/sha_fraud.sqlite) are relative to the repo root,
+    # not to wherever the process was started; absolute Drive paths are kept as they are.
+    for key, value in (config.get("paths") or {}).items():
+        if isinstance(value, str) and not Path(value).is_absolute():
+            config["paths"][key] = str(REPO_ROOT / value)
+    return config

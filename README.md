@@ -107,18 +107,35 @@ The synthetic claims dataset is built in three stages (Section 3.2.1); all three
 
 ## Running
 
+The pipeline runs on Colab (`notebooks/03_run_pipeline.ipynb`) and writes its audit
+reports to `MyDrive/claimguard/db/sha_fraud.sqlite`. The dashboard runs on a laptop
+against a downloaded copy of that database:
+
+1. Download `MyDrive/claimguard/db/sha_fraud.sqlite` to `db/sha_fraud.sqlite`, and
+   `MyDrive/claimguard/artifacts/icd11_cache.json` to `artifacts/` (the review screen
+   shows each billed code's ICD-11 reference text from it).
+2. Create `config/config.yaml` from `config/config.example.yaml` with repo-relative paths
+   (`db_path: db/sha_fraud.sqlite`, `artifacts_dir: artifacts`, `model_dir: models`).
+   Relative paths resolve against the repo root.
+3. Optionally, for the latest run's funnel chart, download the newest log in
+   `MyDrive/claimguard/experiments/pipeline_runs/` to `experiments/pipeline_runs/`.
+4. From the repo root:
+
 ```bash
-streamlit run dashboard/app.py
+venv/bin/python -m streamlit run dashboard/app.py
 ```
 
-Every module has a real implementation (not just stubs) — data preprocessing, both
-anomaly detectors, SHAP, the classifier/training loop, ICD-11 client + cache, the LLM
-narrative layer, the SQLite repository, feedback capture, and the retraining
-promotion gate. What's still missing before this is genuinely useful end-to-end: an
-actual synthetic dataset (Sprint 1) and a trained classifier checkpoint (Sprint 4+) —
-until then, `admin_view()` will correctly report "no trained checkpoint found" rather
-than fail. See `tests/test_plan.md` and the Product Backlog (documentation repo, Section
-3.4.1) for build order.
+Use `python -m streamlit`, not the bare `streamlit` command: it puts the repo root on the
+import path, so `src` can be imported. Decisions are written to the local copy, so upload
+it back to Drive to keep them. Approve and reject decisions also append labelled
+examples to `artifacts/feedback_dataset/examples.jsonl` (FR-12). For the Model performance
+tab, copy the active classifier run folder to `models/classifier_lora/active/`.
+
+The dashboard is one page with no sign-in: Overview (statistics and charts), Review queue,
+Model performance and Feedback loop. Authentication was descoped because the project's
+contribution is the detection engine, not the access control around it; decisions are
+therefore recorded without a reviewer identity. `src/auth` and `src/db/seed.py` remain for a
+multi-user deployment but the dashboard does not use them.
 
 **Before Sprint 3** (ICD-11 integration), refresh the local ICD-11 cache once against the
 running container rather than requiring live access on every claim:

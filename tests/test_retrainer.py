@@ -11,6 +11,7 @@ def _feedback_repo(tmp_path, n_examples=0):
             claim={"id": i, "clinical_notes": f"notes {i}", "icd11_code": "1A00"},
             verdict={"verdict": "inconsistent"},
             auditor_decision="approved",
+            icd11_definition="Cholera",
         )
     return repo
 
@@ -36,7 +37,7 @@ def test_evaluate_and_promote_promotes_when_no_active_model_exists(tmp_path):
 
     retrainer = ClassifierRetrainer(repo, str(active_dir), str(tmp_path / "candidates"))
 
-    with patch("src.feedback.retrainer.SemanticConsistencyClassifier"), \
+    with patch("src.classification.classifier.SemanticConsistencyClassifier"), \
          patch.object(ClassifierRetrainer, "_evaluate_on_test_set",
                        return_value={"f1": 0.8, "recall": 0.85}):
         promoted = retrainer.evaluate_and_promote(str(candidate_dir), held_out_test_examples=[])
@@ -60,7 +61,7 @@ def test_evaluate_and_promote_rejects_worse_candidate(tmp_path):
     retrainer = ClassifierRetrainer(repo, str(active_dir), str(candidates_holding_dir))
 
     metrics_by_call = iter([{"f1": 0.5, "recall": 0.6}, {"f1": 0.9, "recall": 0.9}])
-    with patch("src.feedback.retrainer.SemanticConsistencyClassifier"), \
+    with patch("src.classification.classifier.SemanticConsistencyClassifier"), \
          patch.object(ClassifierRetrainer, "_evaluate_on_test_set",
                        side_effect=lambda *a, **k: next(metrics_by_call)):
         promoted = retrainer.evaluate_and_promote(str(candidate_dir), held_out_test_examples=[])

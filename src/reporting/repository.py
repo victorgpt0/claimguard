@@ -75,7 +75,21 @@ class AuditReportRepository:
             rows = conn.execute(
                 """SELECT r.*, c.provider_id, c.icd11_code, c.claim_amount, c.clinical_notes
                    FROM AuditReport r JOIN Claim c ON c.id = r.claim_id
-                   WHERE r.status = 'pending' ORDER BY r.created_at ASC"""
+                   WHERE r.status = 'pending' ORDER BY r.created_at, r.id"""
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def get_all_reports(self) -> list[dict]:
+        """Every report with its claim and verdict, for the dashboard's statistics."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT r.id, r.status, r.shap_attribution, r.llm_narrative IS NOT NULL AS has_narrative,
+                          r.created_at, r.reviewed_at, c.provider_id, c.icd11_code, c.claim_amount,
+                          c.anomaly_score, v.verdict, v.confidence
+                   FROM AuditReport r
+                   JOIN Claim c ON c.id = r.claim_id
+                   LEFT JOIN ClassifierVerdict v ON v.id = r.verdict_id
+                   ORDER BY r.id"""
             ).fetchall()
             return [dict(row) for row in rows]
 
@@ -83,7 +97,8 @@ class AuditReportRepository:
         """FR-08: full detail view for a single report."""
         with self._connect() as conn:
             row = conn.execute(
-                """SELECT r.*, c.provider_id, c.icd11_code, c.claim_amount, c.clinical_notes,
+                """SELECT r.*, c.provider_id, c.patient_ref, c.icd11_code, c.claim_amount,
+                          c.service_date, c.discharge_date, c.clinical_notes, c.anomaly_score,
                           v.verdict, v.confidence, v.model_version
                    FROM AuditReport r
                    JOIN Claim c ON c.id = r.claim_id
@@ -93,7 +108,7 @@ class AuditReportRepository:
             ).fetchone()
             return dict(row) if row else None
 
-    def record_decision(self, report_id: int, decision: str, reviewer_id: int) -> None:
+    def record_decision(self, report_id: int, decision: str, reviewer_id: int | None = None) -> None:
         """FR-09: persist approve/reject/escalate + timestamp + reviewer identity.
         Where decision is approve or reject, the caller (dashboard/app.py) is responsible
         for also materialising a Feedback Dataset example (FR-12) via FeedbackRepository

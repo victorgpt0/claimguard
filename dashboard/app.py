@@ -1,22 +1,38 @@
-"""Streamlit dashboard entrypoint (IR-03). Role-based views:
-- Fraud Auditor: pending-report queue + review (FR-08, FR-09) on a single view showing
-  SHAP attribution, classifier verdict, and LLM narrative together (NFR-07).
-- Administrator: detection performance metrics + classifier retraining history only
-  (FR-11) — threshold configuration is a file (config/config.yaml, FR-10), not a
-  dashboard control; user management is out of scope (FR-11 scope note).
+"""Streamlit dashboard entrypoint (IR-03): a single page, no sign-in, with four tabs.
+
+- Overview: statistics and charts over every audit report in the database, plus the
+  latest pipeline run's funnel when its log is available.
+- Review queue: pending reports with SHAP attribution, classifier verdict and LLM
+  narrative together (FR-08, NFR-07), and the approve/reject/escalate decision (FR-09).
+- Model performance: the active classifier's validation metrics and stratified breakdown.
+- Feedback loop: the Feedback Dataset and the retraining trigger (FR-12, FR-13).
+
+Thresholds come from config/config.yaml (FR-10), not a dashboard control. The dashboard
+never loads torch or transformers: it reads what the pipeline and training runs wrote.
 """
 from __future__ import annotations
 
 import json
+from collections import Counter
+from pathlib import Path
 
+import altair as alt
+import pandas as pd
 import streamlit as st
 
-from src.auth.user import authenticate
-from src.classification.classifier import SemanticConsistencyClassifier
+from src.classification.export import reference_text
 from src.config import load_config
 from src.feedback.feedback_repository import FeedbackRepository
 from src.feedback.retrainer import ClassifierRetrainer
+from src.icd11.cache import ICD11Cache
 from src.reporting.repository import AuditReportRepository
+
+DECISIONS = ["approved", "rejected", "escalated"]
+TYPOLOGY_NAMES = {
+    "none": "Clean", "upcoding": "Upcoding", "ghost_billing": "Ghost billing",
+    "record_fabrication": "Record fabrication", "outpatient_to_inpatient": "Outpatient conversion",
+    "anomalous_dependents": "Anomalous dependents", "inflated_caesarean": "Inflated caesarean",
+}
 
 
 @st.cache_resource
@@ -29,116 +45,429 @@ def get_repository(db_path: str) -> AuditReportRepository:
     return AuditReportRepository(db_path)
 
 
-def login_form():
-    st.title("ClaimGuard — Sign in")
-    with st.form("login"):
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Sign in")
-    if submitted:
-        config = get_config()
-        user = authenticate(config["paths"]["db_path"], username, password)
-        if user is None:
-            st.error("Invalid username or password.")
-        else:
-            st.session_state["user"] = user
-            st.rerun()
+@st.cache_resource
+def get_icd11_cache(artifacts_dir: str) -> ICD11Cache:
+    return ICD11Cache(artifacts_dir + "/icd11_cache.json")
 
 
-def auditor_view(repository: AuditReportRepository, config: dict):
-    st.header("Pending Audit Reports")
-    pending = repository.get_pending_reports()
-    if not pending:
+def code_reference(config: dict, code: str) -> str:
+    """The same reference text the classifier judged the claim against (export.py)."""
+    return reference_text(get_icd11_cache(config["paths"]["artifacts_dir"]).get(code))
+
+
+def feedback_repository(config: dict) -> FeedbackRepository:
+    return FeedbackRepository(config["paths"]["artifacts_dir"] + "/feedback_dataset/examples.jsonl")
+
+
+def active_model_path(config: dict) -> Path:
+    return Path(config["paths"]["model_dir"]) / "classifier_lora" / "active"
+
+
+def read_json(path: Path) -> dict | None:
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+def latest_pipeline_run(config: dict) -> dict | None:
+    """The newest log written by src.pipeline, if one has been copied from Drive."""
+    experiments = config["paths"].get("experiments_dir")
+    if not experiments:
+        return None
+    runs = sorted((Path(experiments) / "pipeline_runs").glob("*.json"))
+    return read_json(runs[-1]) if runs else None
+
+
+def kes(amount: float) -> str:
+    return f"KES {amount:,.0f}"
+
+
+# --- Overview ---------------------------------------------------------------------------
+
+def overview_tab(reports: pd.DataFrame, config: dict):
+    if reports.empty:
+        st.info("The database has no audit reports yet. Run the pipeline (notebook 03) first.")
+        return
+
+    reviewed = reports[reports["status"] != "pending"]
+    inconsistent = reports[reports["verdict"] == "inconsistent"]
+    cols = st.columns(5)
+    cols[0].metric("Flagged claims", len(reports))
+    cols[1].metric("Pending review", int((reports["status"] == "pending").sum()))
+    cols[2].metric("Reviewed", len(reviewed),
+                   f"{len(reviewed) / len(reports):.0%} of reports", delta_color="off")
+    cols[3].metric("Inconsistent verdicts", len(inconsistent),
+                   f"{int(reports['has_narrative'].sum())} with narrative", delta_color="off")
+    cols[4].metric("Amount under audit", kes(reports["claim_amount"].sum()))
+
+    run = latest_pipeline_run(config)
+    if run:
+        funnel_chart(run)
+
+    left, right = st.columns(2)
+    with left:
+        st.subheader("Review status")
+        status = reports["status"].value_counts().reindex(["pending", *DECISIONS], fill_value=0)
+        st.altair_chart(donut(status.rename_axis("status").reset_index(name="reports"), "status"),
+                        width="stretch")
+    with right:
+        st.subheader("Classifier verdicts")
+        verdicts = reports["verdict"].fillna("none").value_counts()
+        st.altair_chart(donut(verdicts.rename_axis("verdict").reset_index(name="reports"), "verdict"),
+                        width="stretch")
+
+    left, right = st.columns(2)
+    with left:
+        st.subheader("Anomaly scores of flagged claims")
+        st.caption("Isolation Forest score: higher is more anomalous.")
+        st.altair_chart(
+            alt.Chart(reports.dropna(subset=["anomaly_score"])).mark_bar().encode(
+                alt.X("anomaly_score:Q", bin=alt.Bin(maxbins=20), title="Anomaly score"),
+                alt.Y("count():Q", title="Claims"),
+                alt.Color("verdict:N", title="Verdict"),
+                tooltip=["count():Q"]),
+            width="stretch")
+    with right:
+        st.subheader("Why claims were flagged")
+        st.caption("How often each feature is among a claim's top 3 SHAP attributions.")
+        shap = shap_frequency(reports["shap_attribution"])
+        st.altair_chart(
+            alt.Chart(shap).mark_bar().encode(
+                alt.X("claims:Q", title="Claims"),
+                alt.Y("feature:N", sort="-x", title=None),
+                tooltip=["feature", "claims", alt.Tooltip("mean_abs_shap:Q", format=".3f")]),
+            width="stretch")
+
+    left, right = st.columns(2)
+    with left:
+        st.subheader("Providers with the most flagged claims")
+        providers = (reports.groupby("provider_id")
+                     .agg(claims=("id", "size"), amount=("claim_amount", "sum"))
+                     .sort_values("claims", ascending=False).head(10).reset_index())
+        st.altair_chart(
+            alt.Chart(providers).mark_bar().encode(
+                alt.X("claims:Q", title="Flagged claims"),
+                alt.Y("provider_id:N", sort="-x", title=None),
+                tooltip=["provider_id", "claims", alt.Tooltip("amount:Q", format=",.0f", title="KES")]),
+            width="stretch")
+    with right:
+        st.subheader("Flagged amount by ICD-11 code")
+        codes = (reports.groupby("icd11_code")
+                 .agg(claims=("id", "size"), amount=("claim_amount", "sum"))
+                 .sort_values("amount", ascending=False).head(10).reset_index())
+        st.altair_chart(
+            alt.Chart(codes).mark_bar().encode(
+                alt.X("amount:Q", title="KES"),
+                alt.Y("icd11_code:N", sort="-x", title=None),
+                tooltip=["icd11_code", "claims", alt.Tooltip("amount:Q", format=",.0f", title="KES")]),
+            width="stretch")
+
+
+def donut(frame: pd.DataFrame, category: str) -> alt.Chart:
+    return alt.Chart(frame).mark_arc(innerRadius=50).encode(
+        alt.Theta("reports:Q"), alt.Color(f"{category}:N", title=None),
+        tooltip=[category, "reports"]).properties(height=220)
+
+
+def shap_frequency(attributions: pd.Series) -> pd.DataFrame:
+    counts, magnitude = Counter(), Counter()
+    for raw in attributions.dropna():
+        for feature, value in json.loads(raw).items():
+            counts[feature] += 1
+            magnitude[feature] += abs(value)
+    return pd.DataFrame([{"feature": f, "claims": n, "mean_abs_shap": magnitude[f] / n}
+                         for f, n in counts.items()])
+
+
+def funnel_chart(run: dict):
+    """The latest run's funnel: screened -> flagged -> inconsistent -> narrative."""
+    summary, evaluation = run["summary"], run.get("evaluation", {})
+    st.subheader("Latest pipeline run")
+    st.caption(f"Started {run['started_at'][:16].replace('T', ' ')} UTC, "
+               f"batch of {summary['claims']} claims.")
+    left, right = st.columns(2)
+    with left:
+        stages = pd.DataFrame({
+            "stage": ["Screened", "Flagged (stage 1)", "Inconsistent (classifier)", "Narrative (LLM)"],
+            "claims": [summary["claims"], summary["flagged_stage1"], summary["inconsistent"],
+                       summary["narratives"]]})
+        st.altair_chart(
+            alt.Chart(stages).mark_bar().encode(
+                alt.X("claims:Q", title="Claims", scale=alt.Scale(type="symlog")),
+                alt.Y("stage:N", sort=None, title=None),
+                tooltip=["stage", "claims"]) +
+            alt.Chart(stages).mark_text(align="left", dx=4).encode(
+                alt.X("claims:Q", scale=alt.Scale(type="symlog")), alt.Y("stage:N", sort=None),
+                text="claims:Q"),
+            width="stretch")
+        st.caption("Log scale.")
+    with right:
+        by_typology = evaluation.get("flagged_by_typology")
+        if by_typology:
+            frame = pd.DataFrame([
+                {"typology": TYPOLOGY_NAMES.get(t, t), "share flagged": v["sum"] / v["size"],
+                 "flagged": v["sum"], "claims": v["size"]}
+                for t, v in by_typology.items()])
+            st.altair_chart(
+                alt.Chart(frame).mark_bar().encode(
+                    alt.X("share flagged:Q", axis=alt.Axis(format="%"), scale=alt.Scale(domain=[0, 1]),
+                          title="Share flagged at stage 1 (ground truth)"),
+                    alt.Y("typology:N", sort="-x", title=None),
+                    tooltip=["typology", "flagged", "claims"]),
+                width="stretch")
+            st.caption(f"Stage-1 recall {evaluation['stage1_recall']:.0%}; "
+                       f"{evaluation['inconsistent_caught']} of {evaluation['inconsistent_total']} "
+                       "text-inconsistent claims reached a narrative. Ground truth exists only "
+                       "because the data is synthetic.")
+
+
+# --- Review queue -----------------------------------------------------------------------
+
+def review_tab(repository: AuditReportRepository, config: dict):
+    pending = pd.DataFrame(repository.get_all_reports())
+    pending = pending[pending["status"] == "pending"] if not pending.empty else pending
+    if pending.empty:
         st.info("No pending reports.")
         return
 
-    report_options = {f"#{r['id']} — {r['provider_id']} — {r['icd11_code']}": r["id"] for r in pending}
-    selected_label = st.selectbox("Select a report to review", list(report_options.keys()))
-    report = repository.get_report(report_options[selected_label])
+    filters = st.columns([2, 2, 3])
+    verdict = filters[0].selectbox("Verdict", ["all", "inconsistent", "consistent"])
+    order = filters[1].selectbox("Order", ["Highest anomaly score", "Oldest first"])
+    if verdict != "all":
+        pending = pending[pending["verdict"] == verdict]
+    if order == "Highest anomaly score":
+        pending = pending.sort_values("anomaly_score", ascending=False)
+    if pending.empty:
+        st.info("No pending reports match.")
+        return
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Claim")
-        st.write(f"**Provider:** {report['provider_id']}")
-        st.write(f"**Billed ICD-11 code:** {report['icd11_code']}")
-        st.write(f"**Claim amount:** {report['claim_amount']}")
-        st.write("**Clinical notes:**")
-        st.write(report["clinical_notes"])
-    with col2:
-        st.subheader("Classifier verdict")
-        st.write(f"**Verdict:** {report.get('verdict', 'n/a')} "
-                 f"(confidence: {report.get('confidence', 0):.2f})")
-        st.subheader("SHAP attribution")
-        st.json(json.loads(report["shap_attribution"] or "{}"))
-        if report.get("llm_narrative"):
-            st.subheader("Audit narrative")
-            st.write(report["llm_narrative"])
+    labels = {f"#{r.id} · {r.verdict or 'no verdict'} · {r.provider_id} · {r.icd11_code}": r.id
+              for r in pending.itertuples()}
+    selected = filters[2].selectbox(f"Report ({len(labels)} pending)", list(labels))
+    report = repository.get_report(labels[selected])
+
+    claim_panel(report)
+    left, right = st.columns(2)
+    with left:
+        notes_panel(report)
+    with right:
+        code_panel(config, report["icd11_code"])
+    left, right = st.columns(2)
+    with left:
+        shap_panel(report)
+    with right:
+        verdict_panel(report)
+    narrative_panel(report)
 
     st.subheader("Decision")
-    decision_cols = st.columns(3)
-    for col, decision in zip(decision_cols, ["approved", "rejected", "escalated"]):
-        if col.button(decision.capitalize(), key=f"decide_{decision}"):
-            _record_decision_and_maybe_feedback(repository, report, decision, config)
-            st.success(f"Recorded: {decision}")
+    for col, decision in zip(st.columns(3), DECISIONS):
+        if col.button(decision.capitalize(), key=f"decide_{decision}", width="stretch"):
+            record_decision(repository, report, decision, config)
+            st.toast(f"Report #{report['id']}: {decision}")
             st.rerun()
 
 
-def _record_decision_and_maybe_feedback(repository, report, decision, config):
-    reviewer_id = st.session_state["user"].id
-    repository.record_decision(report["id"], decision, reviewer_id)
+# The review screen shows a report as five numbered panels in pipeline order: the claim's
+# inputs (1-3), then what each stage concluded (4-6). Inputs and outputs are labelled as
+# such so a reviewer can tell submitted data from generated text.
 
-    if decision in ("approved", "rejected"):
-        feedback_repo = FeedbackRepository(config["paths"]["artifacts_dir"] + "/feedback_dataset/examples.jsonl")
-        feedback_repo.materialize_example(
-            claim={"id": report["claim_id"], "clinical_notes": report["clinical_notes"],
-                   "icd11_code": report["icd11_code"]},
-            verdict={"verdict": report.get("verdict")},
-            auditor_decision=decision,
-        )
-        retrainer = ClassifierRetrainer(
-            feedback_repo,
-            active_model_path=config["paths"]["model_dir"] + "/classifier_lora/active",
-            candidate_dir=config["paths"]["model_dir"] + "/classifier_lora/candidates",
-        )
-        if retrainer.maybe_trigger_retraining(config["thresholds"]["retrain_trigger_count"]):
-            st.info("Retraining trigger reached — run src/classification/train.py on "
-                    "Colab against the current Feedback Dataset (see implementation_roadmap.md).")
+def claim_panel(report: dict):
+    with st.container(border=True):
+        st.markdown("#### 1 · Structured claim fields")
+        st.caption("Input: the billing record as submitted.")
+        stay = "—"
+        if report.get("discharge_date"):
+            days = (pd.Timestamp(report["discharge_date"]) - pd.Timestamp(report["service_date"])).days
+            stay = f"{days} day{'s' if days != 1 else ''}"
+        fields = [("Provider", report["provider_id"]), ("Member", report.get("patient_ref") or "—"),
+                  ("Billed ICD-11 code", report["icd11_code"]), ("Amount", kes(report["claim_amount"])),
+                  ("Service date", report.get("service_date") or "—"),
+                  ("Discharge date", report.get("discharge_date") or "— (outpatient)"),
+                  ("Length of stay", stay)]
+        for row in (fields[:4], fields[4:]):
+            for col, (label, value) in zip(st.columns(4), row):
+                col.metric(label, value)
 
 
-def admin_view(config: dict):
-    st.header("Detection Performance Metrics")
-    active_model_path = config["paths"]["model_dir"] + "/classifier_lora/active"
-    metrics = SemanticConsistencyClassifier.load_metrics(active_model_path)
+def notes_panel(report: dict):
+    with st.container(border=True, height="stretch"):
+        st.markdown("#### 2 · Clinical notes")
+        st.caption("Input: the provider's free-text justification, exactly as submitted.")
+        st.text(report["clinical_notes"])
+
+
+def code_panel(config: dict, code: str):
+    definition = get_icd11_cache(config["paths"]["artifacts_dir"]).get(code)
+    with st.container(border=True, height="stretch"):
+        st.markdown(f"#### 3 · ICD-11 reference for {code}")
+        st.caption("Reference: WHO ICD-11 title and definition the notes are checked against.")
+        st.markdown(f"**{definition.title}**")
+        if definition.definition:
+            st.markdown(definition.definition)
+            if definition.definition_source and definition.definition_source != code:
+                st.caption(f"Definition inherited from parent category {definition.definition_source}.")
+        else:
+            st.caption("ICD-11 gives no definition for this code; the title alone is used.")
+
+
+def shap_panel(report: dict):
+    with st.container(border=True, height="stretch"):
+        st.markdown("#### 4 · Stage 1: why the claim was flagged")
+        st.caption(f"Output: anomaly score {report.get('anomaly_score') or 0:.3f} from the anomaly "
+                   "detectors, with SHAP's top 3 contributing fields. Red pushes the claim towards "
+                   "anomalous, blue away.")
+        attribution = json.loads(report["shap_attribution"] or "{}")
+        if attribution:
+            frame = pd.DataFrame({"feature": list(attribution), "shap": list(attribution.values())})
+            st.altair_chart(
+                alt.Chart(frame).mark_bar().encode(
+                    alt.X("shap:Q", title="Contribution to the anomaly score"),
+                    alt.Y("feature:N", sort="-x", title=None),
+                    color=alt.condition("datum.shap > 0", alt.value("#d62728"), alt.value("#1f77b4")),
+                    tooltip=["feature", alt.Tooltip("shap:Q", format=".3f")]).properties(height=140),
+                width="stretch")
+
+
+def verdict_panel(report: dict):
+    verdict = report.get("verdict")
+    with st.container(border=True, height="stretch"):
+        st.markdown("#### 5 · Stage 2: classifier verdict")
+        st.caption("Output: do the notes (2) support the billed code (3)?")
+        message = f"**{verdict or 'no verdict'}** · {report.get('confidence') or 0:.0%} confidence"
+        if verdict == "inconsistent":
+            st.error(message)
+        elif verdict == "consistent":
+            st.success(message)
+        else:
+            st.warning(message)
+        st.caption(f"Model: {report.get('model_version') or 'unknown'}")
+
+
+def narrative_panel(report: dict):
+    with st.container(border=True):
+        st.markdown("#### 6 · Stage 3: audit narrative")
+        if report.get("llm_narrative"):
+            st.caption("Output: generated by the LLM explanation layer from (2), (3) and the "
+                       "verdict. It explains the verdict; it does not decide it.")
+            st.markdown(f"> {report['llm_narrative']}")
+        elif report.get("verdict") == "consistent":
+            st.info("No narrative: the classifier found the notes consistent with the billed "
+                    "code, and narratives are written only for inconsistent verdicts. The claim "
+                    "is here because its structured fields looked anomalous (panel 4).")
+        else:
+            st.warning("No narrative: generation failed or no LLM was available for this run.")
+
+
+def record_decision(repository, report, decision, config):
+    repository.record_decision(report["id"], decision)
+    if decision not in ("approved", "rejected"):
+        return
+    feedback = feedback_repository(config)
+    feedback.materialize_example(
+        claim={"id": report["claim_id"], "clinical_notes": report["clinical_notes"],
+               "icd11_code": report["icd11_code"]},
+        verdict={"verdict": report.get("verdict")},
+        auditor_decision=decision,
+        icd11_definition=code_reference(config, report["icd11_code"]),
+    )
+    retrainer = ClassifierRetrainer(feedback, active_model_path=str(active_model_path(config)),
+                                    candidate_dir=str(active_model_path(config).parent / "candidates"))
+    if retrainer.maybe_trigger_retraining(config["thresholds"]["retrain_trigger_count"]):
+        st.toast("Retraining trigger reached — run src/classification/train.py on Colab "
+                 "against the current Feedback Dataset.")
+
+
+# --- Model performance ------------------------------------------------------------------
+
+def model_tab(config: dict):
+    path = active_model_path(config)
+    metrics = read_json(path / "metrics.json")
     if metrics is None:
-        st.warning("No trained classifier checkpoint found yet — nothing to report.")
-    else:
-        st.json(metrics)
+        st.warning(f"No classifier checkpoint at {path}. Copy the active run folder there.")
+        return
+    record = read_json(path / "config.json") or {}
+    st.caption(f"Active checkpoint: {record.get('run_id', path.name)} · "
+               f"validation split · epoch {metrics.get('epoch', '?')}")
+    cols = st.columns(4)
+    cols[0].metric("Precision", f"{metrics['precision']:.3f}")
+    cols[1].metric("Recall", f"{metrics['recall']:.3f}", "NFR-05 floor 0.80", delta_color="off")
+    cols[2].metric("F1", f"{metrics['f1']:.3f}")
+    cols[3].metric("Caught", f"{round(metrics['recall'] * metrics['positives'])} / {metrics['positives']}")
+
+    evaluation = read_json(path / "evaluation_validation.json")
+    if evaluation is None:
+        st.info("Run src.classification.evaluate for the stratified breakdown.")
+        return
+    st.subheader("Flagged by fraud typology")
+    st.caption("For upcoding, ghost billing and record fabrication this is recall; for the "
+               "others the notes match the code, so any flag is a false positive.")
+    inconsistent_types = {"upcoding", "ghost_billing", "record_fabrication"}
+    frame = pd.DataFrame([
+        {"typology": TYPOLOGY_NAMES.get(t, t), "rate": v["rate"], "flagged": v["flagged"],
+         "claims": v["claims"],
+         "should be flagged": "yes" if t in inconsistent_types else "no"}
+        for t, v in evaluation["flagged_by_typology"].items()])
+    st.altair_chart(
+        alt.Chart(frame).mark_bar().encode(
+            alt.X("rate:Q", axis=alt.Axis(format="%"), scale=alt.Scale(domain=[0, 1]), title="Share flagged"),
+            alt.Y("typology:N", sort="-x", title=None),
+            alt.Color("should be flagged:N", scale=alt.Scale(domain=["yes", "no"], range=["#2ca02c", "#d62728"])),
+            tooltip=["typology", "flagged", "claims"]),
+        width="stretch")
+
+    left, right = st.columns(2)
+    left.subheader("Clean vs noisy text")
+    left.dataframe(strata_table(evaluation["text_noise"], {"False": "Clean", "True": "Noisy"}))
+    right.subheader("Common vs rare ICD-11 codes")
+    right.dataframe(strata_table(evaluation["code_frequency"], {}))
+    right.caption(f"Rare: {evaluation['rare_code_threshold']}.")
+
+
+def strata_table(strata: dict, names: dict) -> pd.DataFrame:
+    return pd.DataFrame({names.get(k, k): v for k, v in strata.items()}).T[
+        ["claims", "inconsistent", "precision", "recall", "f1"]]
+
+
+# --- Feedback loop ----------------------------------------------------------------------
+
+def feedback_tab(config: dict):
+    feedback = feedback_repository(config)
+    trigger = config["thresholds"]["retrain_trigger_count"]
+    unconsumed = feedback.count_unconsumed_examples()
+    examples = pd.DataFrame(feedback.read_examples(since_consumed_marker=False))
+    cols = st.columns(3)
+    cols[0].metric("Feedback examples", len(examples))
+    cols[1].metric("Since last retraining", unconsumed)
+    cols[2].metric("Retraining trigger", trigger)
+    st.progress(min(unconsumed / trigger, 1.0), f"{unconsumed} of {trigger} examples toward the next retraining")
+    st.caption("Approve and reject decisions become labelled examples for the classifier: a "
+               "rejection is labelled consistent, an approval of an inconsistent verdict "
+               "inconsistent. Approving a consistent verdict and escalating add nothing.")
+    if not examples.empty:
+        st.dataframe(examples[["claim_id", "icd11_code", "classifier_verdict", "auditor_decision", "label"]],
+                     hide_index=True)
 
 
 def main():
     st.set_page_config(page_title="ClaimGuard — SHA Fraud Audit", layout="wide")
-
     try:
         config = get_config()
     except FileNotFoundError as exc:
         st.error(str(exc))
         return
 
-    if "user" not in st.session_state:
-        login_form()
-        return
-
-    user = st.session_state["user"]
-    st.sidebar.write(f"Signed in as **{user.username}** ({user.role})")
-    if st.sidebar.button("Sign out"):
-        del st.session_state["user"]
-        st.rerun()
-
     repository = get_repository(config["paths"]["db_path"])
-    if user.role == "Auditor":
-        auditor_view(repository, config)
-    else:
-        admin_view(config)
+    st.title("ClaimGuard")
+    st.caption(f"SHA post-payment fraud audit · database: {config['paths']['db_path']}")
+    reports = pd.DataFrame(repository.get_all_reports())
+    overview, queue, model, feedback = st.tabs(
+        ["Overview", "Review queue", "Model performance", "Feedback loop"])
+    with overview:
+        overview_tab(reports, config)
+    with queue:
+        review_tab(repository, config)
+    with model:
+        model_tab(config)
+    with feedback:
+        feedback_tab(config)
 
 
 if __name__ == "__main__":

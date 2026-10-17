@@ -17,7 +17,6 @@ import logging
 import shutil
 from pathlib import Path
 
-from src.classification.classifier import SemanticConsistencyClassifier
 from src.feedback.feedback_repository import FeedbackRepository
 
 logger = logging.getLogger(__name__)
@@ -49,6 +48,10 @@ class ClassifierRetrainer:
                               held_out_test_examples: list[dict]) -> bool:
         """FR-14: promote only if candidate F1/recall >= active checkpoint's, both
         measured on the SAME fixed held-out test set. Returns True if promoted."""
+        # Imported here so the dashboard, which only runs the trigger check, never loads
+        # torch and transformers.
+        from src.classification.classifier import SemanticConsistencyClassifier
+
         candidate = SemanticConsistencyClassifier(candidate_checkpoint_path)
         candidate_metrics = self._evaluate_on_test_set(candidate, held_out_test_examples)
 
