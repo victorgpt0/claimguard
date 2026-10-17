@@ -24,6 +24,7 @@ from src.classification.export import reference_text
 from src.config import load_config
 from src.feedback.feedback_repository import FeedbackRepository
 from src.feedback.retrainer import ClassifierRetrainer
+from src.feedback.run_retraining import history_path, read_history
 from src.icd11.cache import ICD11Cache
 from src.reporting.repository import AuditReportRepository
 
@@ -387,11 +388,7 @@ def record_decision(repository, report, decision, config):
         auditor_decision=decision,
         icd11_definition=code_reference(config, report["icd11_code"]),
     )
-    retrainer = ClassifierRetrainer(feedback, active_model_path=str(active_model_path(config)),
-                                    candidate_dir=str(active_model_path(config).parent / "candidates"))
-    if retrainer.maybe_trigger_retraining(config["thresholds"]["retrain_trigger_count"]):
-        st.toast("Retraining trigger reached — run src/classification/train.py on Colab "
-                 "against the current Feedback Dataset.")
+    # The retraining-due notice is the administrator's, shown on the feedback tab (#49).
 
 
 # --- Model performance ------------------------------------------------------------------
@@ -457,12 +454,41 @@ def feedback_tab(config: dict):
     cols[1].metric("Since last retraining", unconsumed)
     cols[2].metric("Retraining trigger", trigger)
     st.progress(min(unconsumed / trigger, 1.0), f"{unconsumed} of {trigger} examples toward the next retraining")
+    retrainer = ClassifierRetrainer(feedback, active_model_path=str(active_model_path(config)),
+                                    candidate_dir=str(active_model_path(config).parent / "candidates"))
+    if retrainer.maybe_trigger_retraining(trigger):  # IR-06
+        st.warning("Retraining due: run `python -m src.feedback.run_retraining` on Colab. It "
+                   "trains a candidate on the training split plus this feedback and promotes it "
+                   "only if it scores at least as well on the held-out test set (FR-14).")
     st.caption("Approve and reject decisions become labelled examples for the classifier: a "
                "rejection is labelled consistent, an approval of an inconsistent verdict "
                "inconsistent. Approving a consistent verdict and escalating add nothing.")
     if not examples.empty:
         st.dataframe(examples[["claim_id", "icd11_code", "classifier_verdict", "auditor_decision", "label"]],
                      hide_index=True)
+    retraining_history(config)
+
+
+def retraining_history(config: dict):
+    """FR-11 (#47): every retraining run, from experiments/retraining_history.jsonl."""
+    st.subheader("Retraining history")
+    history = read_history(history_path(config))
+    if not history:
+        st.caption("No retraining run yet.")
+        return
+    rows = []
+    for run in reversed(history):
+        candidate, active = run.get("candidate_metrics") or {}, run.get("active_metrics") or {}
+        rows.append({"run at (UTC)": run["run_at"][:16].replace("T", " "),
+                     "checkpoint": Path(run["candidate_path"]).name,
+                     "feedback examples": run["feedback_examples"],
+                     "simulated": run.get("simulated_examples", 0),
+                     "candidate F1": candidate.get("f1"), "candidate recall": candidate.get("recall"),
+                     "active F1": active.get("f1"), "active recall": active.get("recall"),
+                     "promoted": "yes" if run["promoted"] else "no"})
+    st.dataframe(pd.DataFrame(rows), hide_index=True)
+    st.caption("F1 and recall on the held-out test set, the promotion gate (FR-14). Simulated "
+               "examples come from ground-truth decisions, not an auditor.")
 
 
 def main():

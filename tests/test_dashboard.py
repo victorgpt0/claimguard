@@ -105,3 +105,24 @@ def test_approving_a_report_records_it_and_writes_feedback(config):
     assert example["label"] == "inconsistent"
     assert example["icd11_definition"] == "Delivery by emergency caesarean section"
     assert {m.label: m.value for m in app.metric}["Feedback examples"] == "1"
+
+
+def test_retraining_notice_and_history_on_the_feedback_tab(config):
+    """#49: the notice is on the feedback tab, not shown to the deciding auditor; #47: the
+    history lists every retraining run."""
+    config["thresholds"]["retrain_trigger_count"] = 1
+    history = Path(config["paths"]["experiments_dir"]) / "retraining_history.jsonl"
+    history.write_text(json.dumps({
+        "run_at": "2026-10-20T09:30:00+00:00", "feedback_examples": 52, "simulated_examples": 40,
+        "candidate_path": "models/classifier_lora/candidates/20261020T093000Z",
+        "candidate_metrics": {"f1": 0.95, "recall": 0.97}, "active_metrics": {"f1": 0.94, "recall": 0.97},
+        "promoted": True}) + "\n")
+    app = _app()
+    assert not any("Retraining due" in w.value for w in app.warning)
+    app = next(s for s in app.selectbox if s.label == "Lane").select("Text inconsistent").run()
+    app = next(b for b in app.button if b.label == "Approved").click().run()
+    assert not any("Retraining" in t.value for t in app.toast)  # the auditor is not told
+    assert any("Retraining due" in w.value for w in app.warning)  # the feedback tab is
+    table = next(d.value for d in app.dataframe if "promoted" in d.value.columns)
+    assert table.iloc[0]["checkpoint"] == "20261020T093000Z"
+    assert table.iloc[0]["promoted"] == "yes"
