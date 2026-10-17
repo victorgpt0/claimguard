@@ -37,6 +37,10 @@ SYSTEM_PROMPT = (
     "note itself: no title, no preamble, no ICD codes, no patient names."
 )
 
+# Notes that never name the diagnosis, so the classifier must judge the clinical picture
+# rather than match diagnosis words against the code title (data_generation.md §8 issue 2).
+FINDINGS_ONLY_STYLE = "Describe the findings and procedure only; do not name the diagnosis."
+
 # Each claim gets one style, chosen by a seeded draw, so the corpus mixes registers the way
 # real claim documentation does.
 STYLES = [
@@ -45,6 +49,7 @@ STYLES = [
     "Use a brief SOAP structure (S:, O:, A:, P:) on separate lines.",
     "Write as a short discharge summary.",
     "Write two or three short sentences covering presentation and management only.",
+    FINDINGS_ONLY_STYLE,
 ]
 DETAIL = [
     "Mention one or two specific examination findings or vital signs.",
@@ -86,12 +91,14 @@ def build_prompt(request: dict, seed: int) -> list[dict]:
     setting = SETTINGS[request["package"]].format(
         facility=facility, stay=request["length_of_stay"], procedure=request["procedure"].lower()
     )
+    style = rng.choice(STYLES)
+    naming = ("" if style == FINDINGS_ONLY_STYLE else
+              " You may name the working diagnosis in ordinary clinical words, but describe "
+              "the clinical picture rather than restating the condition name word for word.")
     user = (
         f"Patient: {request['patient_age']}-year-old {request['patient_sex']}, {setting}.\n"
         f"Condition: {request['diagnosis']}.\n"
-        f"{rng.choice(STYLES)} {rng.choice(DETAIL)} Keep it under 90 words. You may name "
-        f"the working diagnosis in ordinary clinical words, but describe the clinical "
-        f"picture rather than restating the condition name word for word."
+        f"{style} {rng.choice(DETAIL)} Keep it under 90 words.{naming}"
     )
     return [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}]
 

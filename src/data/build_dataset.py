@@ -71,6 +71,7 @@ UNSEEN_ABBREVIATIONS: dict[str, str] = {
     "discharged": "D/C'd",
     "review": "r/v",
     "normal": "NAD",
+    "caesarean section": "C/S",
 }
 
 POOL_FRACTION = 0.10

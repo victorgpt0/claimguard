@@ -1,6 +1,8 @@
 import pandas as pd
 
+from src.data.build_dataset import UNSEEN_ABBREVIATIONS
 from src.data.noise_injection import (
+    CLINICAL_ABBREVIATIONS,
     apply_structured_noise,
     apply_text_noise,
     inject_ghost_billing,
@@ -84,6 +86,27 @@ def test_inject_text_noise_abbreviates_known_terms():
     assert "c/o" in lowered
     assert "sob" in lowered
     assert "shortness" not in lowered
+
+
+def test_caesarean_section_is_abbreviated_in_training_noise():
+    # #51: genuine caesarean notes must also appear abbreviated, or "CS" marks upcoding.
+    for seed in range(5):
+        result = inject_text_noise("caesarean section", rate=1.0, seed=seed)
+        assert result.strip().upper() == "CS"
+
+
+def test_lower_segment_caesarean_takes_precedence():
+    # At rate 1.0 the four-letter "LSCS" also gets a typo, so check it stayed one token
+    # rather than becoming "lower segment CS".
+    for seed in range(5):
+        result = inject_text_noise("lower segment caesarean section", rate=1.0, seed=seed)
+        assert len(result.split()) == 1 and result.strip().upper().startswith("L")
+
+
+def test_unseen_glossary_uses_a_different_caesarean_form():
+    assert UNSEEN_ABBREVIATIONS["caesarean section"] == "C/S"
+    assert "C/S" not in CLINICAL_ABBREVIATIONS.values()
+    assert "CS" not in UNSEEN_ABBREVIATIONS.values()
 
 
 def test_inject_text_noise_zero_rate_is_noop():

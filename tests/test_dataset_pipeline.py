@@ -9,7 +9,7 @@ import pytest
 
 from src.data.build_dataset import UNSEEN_ABBREVIATIONS, build
 from src.data.generator import GeneratorConfig, generate_base_claims, load_catalogue, note_requests
-from src.data.note_synthesis import build_prompt, run, validate_boilerplate, validate_note
+from src.data.note_synthesis import FINDINGS_ONLY_STYLE, build_prompt, run, validate_boilerplate, validate_note
 
 N_CLAIMS = 1200
 
@@ -161,6 +161,18 @@ def test_prompt_is_deterministic_and_never_contains_the_code():
                "patient_sex": "male", "facility_type": "county_referral_hospital", "length_of_stay": 4}
     assert build_prompt(request, 1) == build_prompt(request, 1)
     assert "CA40" not in json.dumps(build_prompt(request, 1))
+
+
+def test_some_prompts_ask_for_findings_without_the_diagnosis():
+    # #51: a share of notes must not name the diagnosis, and those prompts must not also
+    # invite the model to name it.
+    request = {"claim_id": "CLM000001", "icd11_code": "JA00", "diagnosis": "Single spontaneous delivery",
+               "procedure": "", "package": "maternity", "patient_age": 25,
+               "patient_sex": "female", "facility_type": "health_centre", "length_of_stay": 1}
+    users = [build_prompt({**request, "claim_id": f"CLM{i:06d}"}, 1)[1]["content"] for i in range(60)]
+    findings_only = [u for u in users if FINDINGS_ONLY_STYLE in u]
+    assert findings_only and len(findings_only) < len(users)
+    assert not any("name the working diagnosis" in u for u in findings_only)
 
 
 def test_validate_note_rejects_code_leaks():

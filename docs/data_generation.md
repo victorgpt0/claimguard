@@ -264,6 +264,10 @@ is 270 / 90 / 90 / 50 claims with a structured defect in train / validation / te
    genuine caesarean notes written as "CS" or "C/S", so it appears to key on the word
    "caesarean". Upcoding in validation is 14 of 15 delivery pairs, so the surgical pairs
    are barely tested.
+   **Fixed for v0.6 (#51):** training noise now abbreviates "caesarean section" to "CS"
+   and "lower segment caesarean section" to "LSCS" in every split's notes, consistent and
+   upcoded alike; the unseen test/pool glossary uses "C/S" instead (DR-03). About one
+   prompt in six now asks for findings and procedure only, without naming the diagnosis.
 3. **Upcoding is mostly deliveries** (about 83% normal delivery → caesarean), because
    deliveries dominate the eligible claims. This is realistic for SHA's case mix, but
    per-pair results will be thin for the surgical pairs.

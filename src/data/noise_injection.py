@@ -21,9 +21,13 @@ import pandas as pd
 
 # Clinical shorthand substituted at a controlled rate to simulate the abbreviated,
 # non-standard justification text found in operational claims (Section 3.2.2). Matching
-# is whole-word/phrase and case-insensitive; multi-word phrases are listed first so they
-# take precedence over their component words.
+# is whole-word/phrase and case-insensitive; inject_text_noise tries longer phrases first,
+# so a phrase takes precedence over its component words.
 CLINICAL_ABBREVIATIONS: dict[str, str] = {
+    # Caesarean shorthand (#51): noise reaches consistent and upcoded notes alike, so the
+    # classifier cannot treat an abbreviated caesarean as a sign of upcoding.
+    "lower segment caesarean section": "LSCS",
+    "caesarean section": "CS",
     "shortness of breath": "SOB",
     "blood pressure": "BP",
     "complains of": "c/o",
