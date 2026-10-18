@@ -18,7 +18,8 @@ thresholds:
   autoencoder_train_quantile: 0.975
   # Text-consistency screen: flags notes whose TF-IDF cosine similarity to the billed
   # code's ICD-11 reference text is at most this (passes on 15% of clean claims).
-  text_screen_threshold: 0.006211
+  text_screen_threshold: 0.005553
+  text_screen_clean_pass_rate: 0.15
   # Legacy single anomaly-score threshold, superseded by the three values above.
   anomaly_score_threshold: null
   # Semantic Consistency Classifier decision threshold (FR-04). Not yet tuned.
