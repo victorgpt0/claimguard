@@ -211,10 +211,10 @@ Generated data is not in git (`/data/` is gitignored). The notebook writes to Go
 
 ```
 MyDrive/claimguard/data/
-├── raw/v0.4-5k/          base_claims.parquet, providers.parquet, note_requests.jsonl,
+├── raw/<version>/        base_claims.parquet, providers.parquet, note_requests.jsonl,
 │                         generator_config.json, notes.jsonl (+ .meta.json),
 │                         boilerplate_notes.jsonl
-└── processed/v0.4-5k/    train.parquet, validation.parquet, test.parquet,
+└── processed/<version>/  train.parquet, validation.parquet, test.parquet,
                           deployment_pool.parquet, manifest.json
 ```
 
@@ -246,7 +246,52 @@ pool.
 Stage C rerun locally from v0.4's raw files at commit `1420fb1`, adding the structured-field
 noise (§5.6). The claims, labels, amounts and notes are identical to v0.4; the only change
 is 270 / 90 / 90 / 50 claims with a structured defect in train / validation / test / pool.
-**v0.5-5k is the current dataset.**
+All results up to 17 Oct (TC-022 to TC-031) are on v0.5-5k.
+
+### v0.6-20k (generated 2026-10-18)
+
+The full-size dataset planned in Section 3.2.1 (#27). All three stages were run on Colab
+at commit `e565b00` (`manifest.json`: `git_commit`, `colab_commit`), seed 42, on a Tesla
+T4 (15 GB), Python 3.13.15. The parameters that changed from v0.4/v0.5 are
+`N_CLAIMS = 20000` and `N_PROVIDERS = 240`, so the provider-level typologies keep the same
+volume per provider. The generator, catalogue and noise settings are otherwise unchanged,
+apart from the two #51 changes below.
+
+- 20,000 notes written by Qwen2.5 7B Instruct (AWQ) on vLLM, **0 rejected**; about 42
+  minutes (40 batches of 500 at about 63 s each). Boilerplate: 300 generated, 1 rejected;
+  149 for train/validation, 150 for test/pool.
+- 333 claims per typology (exactly the per-typology target), 10.0% fraud in every split,
+  splits disjoint, 38 distinct codes after `repair_icd11_code`.
+
+| Split | Claims | Fraud | Inconsistent | With text noise | With a structured defect |
+|---|---|---|---|---|---|
+| train | 10,800 | 1,079 (10.0%) | 540 | 3,240 | 1,080 |
+| validation | 3,600 | 359 | 179 | 1,080 | 360 |
+| test | 3,600 | 360 | 180 | 1,080 | 360 |
+| deployment pool | 2,000 | 200 | 100 | 600 | 200 |
+
+Each typology has 179–180 claims in train, 59–60 in validation and test, and 33–34 in the
+pool (v0.5: 44–45 and 14–15).
+
+**What changed for #51, and what it did** (checked on the built splits, 18 Oct):
+
+- Caesarean shorthand is now training noise. Of the claims billed as caesarean
+  (JB22.0/JB22.1) whose notes are consistent, 5% in train and 6% in validation contain
+  "CS" (LLM-written or injected); "C/S" appears in 6% of the test split's and 2% of the
+  pool's, from the unseen glossary, against 0–1% in train and validation, where only the
+  LLM writes it. "LSCS" does not occur: the notes never spell out "lower segment caesarean
+  section".
+- About one prompt in six (16% of the first 4,000, re-derived from `note_requests.jsonl`)
+  uses the findings-only style, which does not name the diagnosis.
+- The word itself is still a strong cue: 70% of consistent caesarean-billed training
+  notes contain "caesarean", and none of the upcoded ones do (an upcoded note describes
+  the vaginal delivery that took place, so this is genuine content, not an artefact).
+  Whether the classifier still keys on the word can only be seen in its false positives
+  on genuine caesarean notes without it. Check this in the v0.6 classifier run (#29) and
+  record it as a test result.
+
+**v0.6-20k is the current dataset.** The stage-1 thresholds in `config.example.yaml`
+were tuned on v0.5 and must be re-tuned on v0.6 (`python -m src.detection.tune_stage1`).
 
 ## 8. Known limitations (to address in a later version)
 
@@ -273,8 +318,8 @@ is 270 / 90 / 90 / 50 claims with a structured defect in train / validation / te
    per-pair results will be thin for the surgical pairs.
 4. **Text noise is heavy:** at 0.2 per word, a 15-word note gets 3–4 typos. Halving it
    would let shorthand dominate over typos.
-5. **Size:** 5,000 claims for now. The planned ~20,000 (Section 3.2.1) is for Sprint 6:
-   rerun with `N_CLAIMS = 20000` and a new `DATASET_VERSION`.
+5. **Size:** resolved in v0.6-20k (20,000 claims, 333 per typology). Validation and test
+   still have only 59–60 claims per typology, so per-typology results keep wide intervals.
 6. **SOAP slips:** some SOAP notes put treatment under "A:" (Assessment). This is minor
    and also happens in real notes.
 
