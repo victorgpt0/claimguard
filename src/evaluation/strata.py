@@ -11,6 +11,8 @@ from collections import Counter
 
 import pandas as pd
 
+from src.data.preprocessing import repair_icd11_code
+
 # Same threshold as src/classification/evaluate.py.
 RARE_CODE_SHARE = 0.01
 
@@ -31,7 +33,7 @@ def group_metrics(actual: pd.Series, predicted: pd.Series) -> dict:
 
 
 def rare_codes(train_codes: list[str]) -> set[str]:
-    counts = Counter(train_codes)
+    counts = Counter(repair_icd11_code(code) for code in train_codes)
     return {code for code, n in counts.items() if n / len(train_codes) < RARE_CODE_SHARE}
 
 
@@ -39,9 +41,12 @@ def stratify(frame: pd.DataFrame, train_codes: list[str]) -> dict:
     """`frame` has one row per claim: actual, predicted (0/1), fraud_typology,
     has_text_noise, has_structured_noise, icd11_code — a system's predictions joined
     to the split's claims."""
-    counts = set(train_codes)
+    # Codes as the classifier sees them: structured noise malforms some billed codes, and
+    # an unrepaired malformed code would count as a separate, rare code.
+    counts = {repair_icd11_code(code) for code in train_codes}
     rare = rare_codes(train_codes)
-    code_group = frame["icd11_code"].map(lambda c: "rare" if c in rare or c not in counts else "common")
+    code_group = frame["icd11_code"].map(repair_icd11_code).map(
+        lambda c: "rare" if c in rare or c not in counts else "common")
     by_typology = {
         typology: {"claims": len(group), "flagged": int(group["predicted"].sum()),
                    "rate": round(float(group["predicted"].mean()), 4)}

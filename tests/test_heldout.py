@@ -161,3 +161,10 @@ def test_main_writes_results_and_tables(tmp_path, monkeypatch):
     result = json.loads((run / "results.json").read_text())
     assert result["reference"] == "pipeline" and "mcnemar" in result
     assert (run / "tables.md").read_text().startswith("# Held-out evaluation")
+
+
+def test_malformed_codes_are_not_counted_as_rare_codes():
+    """Structured noise malforms billed codes; strata group them with the real code."""
+    from src.evaluation.strata import rare_codes
+    train = ["JB20"] * 50 + ["jb20"] * 30 + ["JB20 "] * 20 + ["CA40"] * 100
+    assert rare_codes(train) == set()
