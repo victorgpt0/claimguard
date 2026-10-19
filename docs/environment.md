@@ -6,12 +6,16 @@ specs. See `implementation_roadmap.md` Section 2a for the exact commands to capt
 
 ## Development environment (Colab)
 
+Recorded from the notebook outputs and the `pip freeze` snapshots that each notebook saves
+to `MyDrive/claimguard/artifacts/environment_logs/`.
+
 | Item | Tested value | Evidence |
 |---|---|---|
-| Runtime | *(not yet run)* | `!nvidia-smi` output, first classifier training run |
-| GPU | *(not yet run)* | `!nvidia-smi` |
-| Python version | *(not yet run)* | `!python --version` |
-| Key package versions | see `requirements.txt` (starting pins, not yet tested) | `pip freeze` snapshot, saved to `artifacts/environment_logs/` |
+| Runtime | Google Colab with compute units (none left on 19 Oct) | notebooks 01-03 |
+| GPU | Tesla T4, 15,360 MiB, driver 580.82.07 | `nvidia-smi` in notebook 01 (18 Oct) |
+| Python | 3.13.15 | notebook 01 output (18 Oct) |
+| Key packages | torch 2.10.0, transformers 4.57.6, peft 0.21.1, vllm 0.19.0, scikit-learn 1.6.1, shap 0.52.0, pandas 2.2.3, numpy 2.1.3 | `requirements_frozen_*.txt` |
+| Throughput | Note generation (Qwen2.5 7B AWQ, vLLM): about 63 s per 500 notes, 20,000 in about 42 min. Classifier fine-tuning (Bio_ClinicalBERT + LoRA, 10,800 examples): about 42 min per seed | notebook 01 output; run folder timestamps in `experiments/classifier/v0.6-20k/` |
 
 ## Local machine (Docker host, dashboard host)
 
@@ -43,11 +47,22 @@ reasoning for choosing LoRA/PEFT in the first place).
 
 ## Deployment / demonstration environment
 
-*(Not yet decided.)* Distinguish this explicitly from the Colab dev environment once
-decided — `research_writing.txt` line 994 requires it, and warns not to claim public
-availability unless actually deployed for public access. Likely candidates: local run via
-`streamlit run dashboard/app.py`, or a small private VM — record whichever is actually
-used, with its own tested minimum spec.
+*(Not yet deployed.)* Recommended: Streamlit on the local machine behind a Cloudflare Tunnel
+(`docs/hosting_guide.md` option A, GitHub #32). Until it is deployed and tested, describe
+the system as a local prototype; `research_writing.txt` line 994 forbids claiming public
+availability.
+
+The local machine reads Drive directly: the `rclone-gdrive` systemd user service mounts
+`MyDrive` at `~/gdrive` (rclone 1.75.2, VFS cache), and the local `config/config.yaml`
+points `data_dir`, `model_dir`, `artifacts_dir`, `experiments_dir` and `db_path` at
+`~/gdrive/claimguard/...`. Do not write to the SQLite database from Colab and the local
+machine at the same time. The remote uses rclone's shared Google client ID, which rclone
+says is being retired during 2026; create an own client ID
+(https://rclone.org/drive/#making-your-own-client-id) if the mount stops authenticating.
+
+Measured CPU speed on the local machine (19 Oct): classifier fine-tuning about 0.58 s
+per example (one epoch of 10,860 about 1.8 h), inference about 0.09 s per example; the
+tuned pipeline without narratives audited 900 claims in 98 s (TC-031).
 
 ## External services
 
