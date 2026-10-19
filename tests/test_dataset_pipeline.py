@@ -212,3 +212,9 @@ def test_structured_noise_is_applied_and_preprocessing_copes(built):
     test = preprocessor.align_schema(splits["test"])
     assert not pd.isna(preprocessor.feature_matrix(test)).any()
     assert not preprocessor.validate_quality(test)["quality_flag_invalid_code"].any()
+
+
+def test_validate_note_rejects_notes_that_switch_language():
+    """v0.6 had 156 notes (0.8%) where the note model switched to Chinese mid-note."""
+    assert validate_note("Presented with severe headache and 急剧增加的心率，血压显著升高。") == "not in English"
+    assert validate_note("Temp 37.8°C, pt c/o dysuria; naïve to antibiotics, café-au-lait spots noted.") is None

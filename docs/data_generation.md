@@ -322,6 +322,15 @@ were tuned on v0.5 and must be re-tuned on v0.6 (`python -m src.detection.tune_s
    still have only 59–60 claims per typology, so per-typology results keep wide intervals.
 6. **SOAP slips:** some SOAP notes put treatment under "A:" (Assessment). This is minor
    and also happens in real notes.
+7. **Some notes switch language (found 19 Oct, TC-033).** Qwen2.5 occasionally continues a
+   note in Chinese: 156 of v0.6's 20,000 notes (0.8%; train 82, validation 30, test 24,
+   pool 20) contain non-Latin script, and v0.4/v0.5 had 37 of 5,000. `validate_note` did
+   not check language, so they were accepted. They are mostly clean claims, yet 3 of the
+   v0.6 classifier's 5 validation false positives are among them. `validate_note` now
+   rejects any non-Latin letter, so the next generation regenerates them; v0.6 is left
+   as built, because its classifier is already trained and regenerating needs a GPU.
+   Report it as a data-quality limitation, or, if v0.6 is ever rebuilt, rerun stage B
+   for these claims only (the stage resumes per claim) and then stage C.
 
 ## 9. Rerunning
 

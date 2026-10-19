@@ -167,6 +167,10 @@ def validate_note(note: str, request: dict | None = None) -> str | None:
         return "contains the ICD-11 code"
     if _ICD_CODE.search(note):
         return "contains an ICD-like code"
+    if any(ch.isalpha() and ord(ch) > 0x024F for ch in note):
+        # The note model sometimes switches language mid-note (0.8% of v0.6's notes, mostly
+        # Chinese); the study is English-only, so any letter outside the Latin script fails.
+        return "not in English"
     return None
 
 
