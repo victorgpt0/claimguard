@@ -82,17 +82,18 @@ Code instructions in `docs/remaining_work_plan.md`.
 - **Commits:** one per issue on `dev`, pushed after review.
 
 ### Sprint 6 (19–25 Oct): Full training and feedback loop
-Started early on 17 Oct: the code below is written and unit-tested; the runs are not.
+Started early on 17 Oct. Status on 19 Oct below.
 - [x] Caesarean "CS" shortcut removed from the training noise before regenerating (#51).
 - [x] Stage-1 tuning script and text screen; v0.5 values in `config.example.yaml` (#28, #50, TC-030). Re-run on v0.6.
 - [x] Review lanes and flag sources in the pipeline and dashboard (#46); first validation run with tuned stage 1 (TC-031).
 - [x] Code: seed summary (#29), rule-based baseline (#30), retraining script and history (#31, #47, #48, #49), evaluation harness (#33–#38).
 - [ ] **Open question from TC-031:** on validation the rule-based baseline has the higher F1 (0.60 vs 0.51): the structural-anomaly lane carries most of the pipeline's false positives, and the rules catch inflated caesarean, which the pipeline misses.
-- [ ] Full dataset (about 20,000 claims), regenerated if Sprint 4 used a smaller one.
-- [ ] Autoencoder threshold and Isolation Forest contamination tuned on the validation split; values recorded.
-- [ ] Classifier fine-tuned with all 5 seeds on Colab; evidence saved per run in Drive.
-- [ ] Rule-based baseline and structured-only baseline implemented.
-- [ ] Feedback loop demonstrated once: decisions → Feedback Dataset → retraining → promotion check.
+- [x] Full dataset (18 Oct): v0.6-20k, 20,000 claims, 240 providers, 333 per typology, tagged `v0.6-data` (`docs/data_generation.md`).
+- [x] Stage 1 re-tuned on v0.6 (19 Oct, TC-032): contamination 0.15, autoencoder quantile 0.975, screen threshold 0.005553; recall 0.81 ± 0.02. In `config.example.yaml`.
+- [x] Classifier fine-tuned with all 5 seeds on Colab (18 Oct, TC-033): validation F1 0.975 ± 0.004. Best seed 7 copied to Drive `models/classifier_lora/active/` and frozen as `evaluated_v1/` (adapter files directly inside each folder, not in a run subfolder). "CS" shortcut largely gone; new defect: 0.8% of notes partly in Chinese (validator fixed for future data).
+- [x] Pipeline run on the v0.6 Deployment/Demonstration Pool with narratives (18 Oct, notebook 03, TC-034): 354 reports, 82 narratives, 0 failures. Stage-1 settings as in TC-032 (screen threshold 0.005553); classifier seed 7.
+- [~] Rule-based baseline run on v0.6 validation (222 of 3,600 flagged). Structured-only and zero-shot LLM baselines not yet written (#30, #52).
+- [~] Feedback loop: 80 simulated decisions recorded on 19 Oct (36 approved, 44 rejected; 59 examples, all tagged simulated; 44 old v0.5 reports unmatched and left pending). **Do not rerun `--simulate-auditor`.** Remaining: the retraining run (`python -m src.feedback.run_retraining --config config/config.example.yaml --classifier-data /content/classifier_data` on Colab after re-exporting), which waits for a GPU: no Colab compute units on 19 Oct; on the workstation CPU one epoch takes about 1.8 h.
 - [ ] Deployment requirements identified; hosting option chosen from `docs/hosting_guide.md`.
 
 ### Sprint 7 (26 Oct – 1 Nov): Evaluation and hosting
