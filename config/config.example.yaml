@@ -10,9 +10,10 @@ paths:
   db_path: /content/drive/MyDrive/claimguard/db/sha_fraud.sqlite
 
 thresholds:
-  # Stage 1 (FR-02, #50), from `python -m src.detection.tune_stage1` on the v0.5-5k
-  # validation split, 5 seeds: the union of the three components reaches recall >= 0.80
-  # (mean 0.82, previously 0.37) while passing on 27% of clean claims. Re-run on v0.6.
+  # Stage 1 (FR-02, #50), from `python -m src.detection.tune_stage1` on the v0.6-20k
+  # validation split, 5 seeds (TC-032): the union of the three components reaches recall
+  # >= 0.80 (mean 0.81 +/- 0.02; F1-tuned detectors alone 0.43) while passing on 26% of
+  # clean claims. v0.5 chose the same detector settings, with screen threshold 0.006211.
   isolation_forest_contamination: 0.15
   # Autoencoder flags reconstruction errors above this quantile of its training errors.
   autoencoder_train_quantile: 0.975
