@@ -57,11 +57,14 @@ class ClassifierRetrainer:
         # torch and transformers.
         from src.classification.classifier import SemanticConsistencyClassifier
 
-        candidate = SemanticConsistencyClassifier(candidate_checkpoint_path)
+        import torch
+        # Scoring the test split twice on a CPU takes far longer than on Colab's GPU.
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        candidate = SemanticConsistencyClassifier(candidate_checkpoint_path, device=device)
         candidate_metrics = self._evaluate_on_test_set(candidate, held_out_test_examples)
 
         if self.active_model_path.exists() and any(self.active_model_path.iterdir()):
-            active = SemanticConsistencyClassifier(str(self.active_model_path))
+            active = SemanticConsistencyClassifier(str(self.active_model_path), device=device)
             active_metrics = self._evaluate_on_test_set(active, held_out_test_examples)
             not_worse = (candidate_metrics["f1"] >= active_metrics["f1"]
                          and candidate_metrics["recall"] >= active_metrics["recall"])
