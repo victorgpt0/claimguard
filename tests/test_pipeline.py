@@ -128,6 +128,13 @@ def test_run_predictions_shared_format(stage1, data, tmp_path):
     assert text["flagged"].sum() == sum(c.get("verdict") == "inconsistent" for c in log.claims)
     unseen = [not c["flagged"] for c in log.claims]
     assert (text.loc[unseen, "score"] == 0).all()
+    # Stage-1 flags, for putting another stage-2 model in the classifier's place (#52).
+    assert predictions["pipeline_stage1"]["flagged"].sum() == sum(c["flagged"] for c in log.claims)
+    structural = predictions["pipeline_stage1_structural"]["flagged"]
+    assert structural.sum() == sum(bool({"isolation_forest", "autoencoder"} & set(c["flag_sources"]))
+                                   for c in log.claims)
+    # The pipeline's lane rule: every reported claim is text-inconsistent or structurally flagged.
+    assert (full["flagged"] == ((text["flagged"] & predictions["pipeline_stage1"]["flagged"]) | structural)).all()
 
 
 def test_narrative_only_for_inconsistent_verdicts(stage1, data, tmp_path, monkeypatch):

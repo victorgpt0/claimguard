@@ -242,7 +242,9 @@ def run_predictions(log: RunLog) -> dict[str, pd.DataFrame]:
     """The run in the shared prediction format (src.evaluation.predictions): "pipeline"
     flags every claim that reached an auditor lane; "pipeline_text_lane" only the
     text-inconsistent lane, scored by the classifier's probability of "inconsistent"
-    (0 for claims the classifier never saw)."""
+    (0 for claims the classifier never saw). "pipeline_stage1" (any stage-1 flag) and
+    "pipeline_stage1_structural" (an Isolation Forest or autoencoder flag) let another
+    stage-2 model be put in the classifier's place (src.baselines.zero_shot_llm)."""
     rows = pd.DataFrame(log.claims)
     reported = rows["reported"].fillna(False).astype(bool) if "reported" in rows else rows["flagged"] & False
     verdict = rows.get("verdict", pd.Series(index=rows.index, dtype=object))
@@ -250,7 +252,10 @@ def run_predictions(log: RunLog) -> dict[str, pd.DataFrame]:
     p_inconsistent = np.where(verdict == "inconsistent", confidence,
                               np.where(verdict == "consistent", 1 - confidence, 0.0))
     claim_id = rows["claim_ref"].astype(str)
+    structural = rows["flag_sources"].map(lambda sources: bool({"isolation_forest", "autoencoder"} & set(sources)))
     return {
+        "pipeline_stage1": pd.DataFrame({"claim_id": claim_id, "flagged": rows["flagged"].astype(int)}),
+        "pipeline_stage1_structural": pd.DataFrame({"claim_id": claim_id, "flagged": structural.astype(int)}),
         "pipeline": pd.DataFrame({"claim_id": claim_id, "flagged": reported.astype(int)}),
         "pipeline_text_lane": pd.DataFrame({"claim_id": claim_id,
                                             "flagged": (verdict == "inconsistent").astype(int),
