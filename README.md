@@ -110,6 +110,22 @@ are created, deactivated, never deleted, and Google emails linked). Google sign-
 `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` in `.env`, with the redirect URI
 `http://localhost:8000/accounts/google/login/callback/`.
 
+**Batches and jobs.** The Fraud Auditor uploads a claims CSV under Batches (a template is
+offered); every line is checked and nothing is stored unless all pass. Processing runs as a
+Celery job on one of two queues, with live progress on the batch page:
+
+```bash
+# Local CPU worker (stage 1, SHAP, classifier; no narratives). Same environment variables as the
+# web process; config.yaml needs `pipeline: {dataset: v0.6-20k}` (see config.example.yaml).
+cd web && ../.venv/bin/celery -A claimguard_web worker -Q cpu -c 1 -n cpu@%h
+```
+
+The GPU queue (with narratives) is served by `notebooks/05_gpu_worker.ipynb` on Colab. Colab
+cannot reach this machine, so that needs a PostgreSQL and a Redis reachable from the internet
+(e.g. hosted free tiers), set as `DATABASE_URL`/`REDIS_URL` both here and in the notebook's
+Colab Secrets, and the `django` branch pushed. An uploaded CSV is kept in the database, so any
+worker can process it.
+
 Tests: `.venv/bin/python -m pytest` runs the ML and web suites together (SQLite by default;
 set `DATABASE_URL` to run the web tests on PostgreSQL).
 

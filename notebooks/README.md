@@ -12,3 +12,4 @@ requirements, add `src/` to path) — paste it at the top of every notebook here
 | `02_train_classifier.ipynb` | Colab GPU | Fine-tunes the classifier, 5 seeds |
 | `03_run_pipeline.ipynb` | Colab GPU | Runs a split through the pipeline with narratives; `WRITE_PREDICTIONS = True` also writes `pipeline`, `pipeline_text_lane`, `pipeline_stage1` and `pipeline_stage1_structural` predictions |
 | `04_baselines.ipynb` | Colab GPU | Structured-only baseline (export, 5 seeds, predict, #30) and zero-shot LLM baseline (#52) |
+| `05_gpu_worker.ipynb` | Colab GPU | Celery worker on the web application's `gpu` queue: processes uploaded batches with narratives (needs hosted PostgreSQL and Redis) |

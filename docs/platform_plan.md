@@ -71,3 +71,12 @@ the activity-log screen are cut before anything in the evaluation.
     imported real data. Found and fixed on the way: a row lock PostgreSQL rejects, and the
     overview funnel taking the newest run log even when it is an evaluation run (the
     Streamlit dashboard has the same flaw).
+  - Phase 3 (#57, #58): upload with full validation (FR-15), `Batch`/`Job` models, Celery task
+    running the unchanged `AuditPipeline` through a Django repository, live progress (HTMX),
+    worker status per queue, `notebooks/05_gpu_worker.ipynb`. Verified end to end with a real
+    CPU worker on Redis and PostgreSQL (39 claims: 16 flagged, 13 queued, 30 s). Decisions made
+    on the way: the uploaded CSV is stored in the database, because the Colab worker shares
+    the database but not this machine's disk; the held-out guard checks the configured
+    dataset's test split only, because claim ids repeat across dataset versions. Open: the
+    Colab worker needs hosted PostgreSQL and Redis (not yet chosen) and the branch pushed; it
+    has not run yet.
