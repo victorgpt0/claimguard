@@ -1,4 +1,6 @@
-"""Streamlit dashboard entrypoint (IR-03): a single page, no sign-in, with four tabs.
+"""Streamlit dashboard entrypoint (IR-03): sign-in first (NFR-03), then the tabs of the
+signed-in user's role. The Fraud Auditor sees Overview and Review queue; the Administrator
+sees Overview, Model performance and Feedback loop.
 
 - Overview: statistics and charts over every audit report in the database, plus the
   latest pipeline run's funnel when its log is available.
@@ -13,6 +15,7 @@ never loads torch or transformers: it reads what the pipeline and training runs 
 from __future__ import annotations
 
 import json
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -20,6 +23,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from src.auth.user import User, authenticate
 from src.classification.export import reference_text
 from src.config import load_config
 from src.feedback.feedback_repository import FeedbackRepository
@@ -276,7 +280,7 @@ def review_tab(repository: AuditReportRepository, config: dict):
     st.subheader("Decision")
     for col, decision in zip(st.columns(3), DECISIONS):
         if col.button(decision.capitalize(), key=f"decide_{decision}", width="stretch"):
-            record_decision(repository, report, decision, config)
+            record_decision(repository, report, decision, config, st.session_state["user"])
             st.toast(f"Report #{report['id']}: {decision}")
             st.rerun()
 
@@ -376,8 +380,8 @@ def narrative_panel(report: dict):
             st.warning("No narrative: generation failed or no LLM was available for this run.")
 
 
-def record_decision(repository, report, decision, config):
-    repository.record_decision(report["id"], decision)
+def record_decision(repository, report, decision, config, user: User):
+    repository.record_decision(report["id"], decision, reviewer_id=user.id)
     if decision not in ("approved", "rejected"):
         return
     feedback = feedback_repository(config)
@@ -491,6 +495,55 @@ def retraining_history(config: dict):
                "examples come from ground-truth decisions, not an auditor.")
 
 
+# --- Sign-in (NFR-03) ---------------------------------------------------------------------
+
+AUDITOR, ADMINISTRATOR = "Auditor", "Administrator"
+DEFAULT_SESSION_TIMEOUT_MINUTES = 30
+
+
+def session_timeout_seconds(config: dict) -> float:
+    minutes = (config.get("auth") or {}).get("session_timeout_minutes", DEFAULT_SESSION_TIMEOUT_MINUTES)
+    return float(minutes) * 60
+
+
+def sign_out():
+    for key in ("user", "last_active"):
+        st.session_state.pop(key, None)
+
+
+def current_user(config: dict) -> User | None:
+    """The signed-in user, or None. A session idle for longer than the timeout is signed out."""
+    user = st.session_state.get("user")
+    if user is None:
+        return None
+    if time.time() - st.session_state.get("last_active", 0) > session_timeout_seconds(config):
+        sign_out()
+        st.session_state["expired"] = True
+        return None
+    st.session_state["last_active"] = time.time()
+    return user
+
+
+def sign_in_form(config: dict):
+    st.title("ClaimGuard")
+    st.caption("SHA post-payment fraud audit · sign in to continue")
+    if st.session_state.pop("expired", False):
+        st.info("Your session expired. Sign in again.")
+    with st.form("sign_in"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Sign in")
+    if submitted:
+        # One message for an unknown user and a wrong password, so usernames can't be probed.
+        user = authenticate(config["paths"]["db_path"], username.strip(), password)
+        if user is None:
+            st.error("Incorrect username or password.")
+            return
+        st.session_state["user"] = user
+        st.session_state["last_active"] = time.time()
+        st.rerun()
+
+
 def main():
     st.set_page_config(page_title="ClaimGuard — SHA Fraud Audit", layout="wide")
     try:
@@ -499,20 +552,35 @@ def main():
         st.error(str(exc))
         return
 
-    repository = get_repository(config["paths"]["db_path"])
+    repository = get_repository(config["paths"]["db_path"])  # creates the schema on a new database
+    user = current_user(config)
+    if user is None:
+        sign_in_form(config)
+        return
+
+    with st.sidebar:
+        st.markdown(f"Signed in as **{user.username}** ({user.role})")
+        if st.button("Sign out"):
+            sign_out()
+            st.rerun()
+
     st.title("ClaimGuard")
-    st.caption(f"SHA post-payment fraud audit · database: {config['paths']['db_path']}")
+    st.caption(f"SHA post-payment fraud audit")
     reports = pd.DataFrame(repository.get_all_reports())
-    overview, queue, model, feedback = st.tabs(
-        ["Overview", "Review queue", "Model performance", "Feedback loop"])
-    with overview:
-        overview_tab(reports, config)
-    with queue:
-        review_tab(repository, config)
-    with model:
-        model_tab(config)
-    with feedback:
-        feedback_tab(config)
+    # The role decides which tabs exist at all, so a tab's data is never read for the
+    # wrong role (IR-03, NFR-03).
+    tabs = {AUDITOR: ["Overview", "Review queue"],
+            ADMINISTRATOR: ["Overview", "Model performance", "Feedback loop"]}[user.role]
+    for name, tab in zip(tabs, st.tabs(tabs)):
+        with tab:
+            if name == "Overview":
+                overview_tab(reports, config)
+            elif name == "Review queue":
+                review_tab(repository, config)
+            elif name == "Model performance":
+                model_tab(config)
+            elif name == "Feedback loop":
+                feedback_tab(config)
 
 
 if __name__ == "__main__":

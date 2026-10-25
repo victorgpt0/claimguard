@@ -29,6 +29,10 @@ thresholds:
   # Provisional per chapter4_system_analysis_design.txt FR-13 — not yet validated.
   retrain_trigger_count: 50
 
+auth:
+  # NFR-03: a dashboard session idle for longer than this is signed out.
+  session_timeout_minutes: 30
+
 models:
   # Bio_ClinicalBERT primary choice, BERT-base fallback (Section 3.8.3 / 1.7 compute constraint)
   classifier_base_model: emilyalsentzer/Bio_ClinicalBERT

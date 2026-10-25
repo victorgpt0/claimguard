@@ -73,11 +73,12 @@ docker-compose.yml           # WHO ICD-11 API, self-hosted
 
 4. **Initialise the database:**
    ```bash
-   python -m src.db.seed --db-path /path/to/sha_fraud.sqlite
+   python -m src.db.seed --db-path /path/to/sha_fraud.sqlite [--auditor auditor]
    ```
-   Seeds the schema (Figure 4.7) plus the two user accounts (Auditor, Administrator) — the
-   only two that will ever exist; in-app account management is out of scope (FR-11 scope
-   note).
+   Creates the schema (Figure 4.7) and the first Administrator account, `admin` by default
+   (`--admin` changes the name); the password is asked for and must be at least 10
+   characters. `--auditor` also creates one Auditor account. Re-running leaves existing
+   accounts unchanged, so it never resets a password.
 
 ## Dataset
 
@@ -131,11 +132,11 @@ it back to Drive to keep them. Approve and reject decisions also append labelled
 examples to `artifacts/feedback_dataset/examples.jsonl` (FR-12). For the Model performance
 tab, copy the active classifier run folder to `models/classifier_lora/active/`.
 
-The dashboard is one page with no sign-in: Overview (statistics and charts), Review queue,
-Model performance and Feedback loop. Authentication was descoped because the project's
-contribution is the detection engine, not the access control around it; decisions are
-therefore recorded without a reviewer identity. `src/auth` and `src/db/seed.py` remain for a
-multi-user deployment but the dashboard does not use them.
+The dashboard opens on a sign-in form (NFR-03); create the accounts first with
+`src.db.seed` (step 4 above) against the same database. Each role sees its own tabs (IR-03):
+the Fraud Auditor sees Overview and Review queue, and every decision is stored with the
+auditor's identity (FR-09); the Administrator sees Overview, Model performance and Feedback
+loop. A session idle for `auth.session_timeout_minutes` (default 30) is signed out.
 
 **Before Sprint 3** (ICD-11 integration), refresh the local ICD-11 cache once against the
 running container rather than requiring live access on every claim:

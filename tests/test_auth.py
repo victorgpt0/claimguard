@@ -46,3 +46,15 @@ def test_authenticate_wrong_password(tmp_db_path):
 def test_authenticate_unknown_user(tmp_db_path):
     db_path = _seeded_db(tmp_db_path)
     assert authenticate(db_path, "nobody", "whatever") is None
+
+
+def test_seed_user_is_idempotent_and_never_resets_a_password(tmp_db_path):
+    import pytest
+    from src.db.seed import seed_user, user_exists
+    assert seed_user(tmp_db_path, "admin", "first-password", "Administrator")
+    assert not seed_user(tmp_db_path, "admin", "second-password", "Administrator")
+    assert user_exists(tmp_db_path, "admin")
+    assert authenticate(tmp_db_path, "admin", "first-password").role == "Administrator"
+    assert authenticate(tmp_db_path, "admin", "second-password") is None
+    with pytest.raises(ValueError):
+        seed_user(tmp_db_path, "auditor", "short", "Auditor")
