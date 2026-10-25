@@ -134,9 +134,14 @@ tab, copy the active classifier run folder to `models/classifier_lora/active/`.
 
 The dashboard opens on a sign-in form (NFR-03); create the accounts first with
 `src.db.seed` (step 4 above) against the same database. Each role sees its own tabs (IR-03):
-the Fraud Auditor sees Overview and Review queue, and every decision is stored with the
-auditor's identity (FR-09); the Administrator sees Overview, Model performance and Feedback
-loop. A session idle for `auth.session_timeout_minutes` (default 30) is signed out.
+the Fraud Auditor sees Overview, Review queue and Account, and every decision is stored with
+the auditor's identity (FR-09); the Administrator sees Overview, Model performance, Feedback
+loop, Users, Activity log and Account. In Users the Administrator creates accounts,
+deactivates or reactivates them (never deletes, so decisions stay attributable; the last
+active Administrator is protected), resets passwords and links Google accounts. Everyone can
+change their own password under Account. Sign-ins (including failed ones), sign-outs,
+decisions and account changes are recorded in the activity log, which the Administrator can
+filter and download as CSV; it never holds a password or note text. A session idle for `auth.session_timeout_minutes` (default 30) is signed out.
 
 **Sign in with Google (optional, #61).** Copy `.streamlit/secrets.example.toml` to
 `.streamlit/secrets.toml` (gitignored) and fill in an OAuth client from Google Cloud Console
@@ -146,6 +151,7 @@ account gets in only after it is linked to an existing user, and then with that 
 ```bash
 python -m src.db.seed --db-path <db> --link-email auditor someone@gmail.com
 ```
+(or, once signed in as the Administrator, in the Users tab).
 Without `secrets.toml` the button is hidden and password sign-in works as before. Passwords
 are stored only as salted PBKDF2-SHA256 hashes.
 

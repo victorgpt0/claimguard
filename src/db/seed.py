@@ -1,9 +1,8 @@
 """Seeds the first Administrator account (NFR-03) into the database, creating the schema
-if needed. Auditor accounts are created by the Administrator in the dashboard (#56);
-`--auditor` also seeds one Auditor, for a demonstration before that exists.
+if needed. Other accounts are created by the Administrator in the dashboard's Users tab
+(#56); `--auditor` also seeds one Auditor, for convenience.
 
 Idempotent: an existing username is left unchanged, so re-running never resets a password.
-
 `--link-email USERNAME EMAIL` links a Google account to an existing user (#61), so that user
 can also use "Sign in with Google". It never changes the password.
 
@@ -12,37 +11,30 @@ Usage: python -m src.db.seed --db-path /path/to/sha_fraud.sqlite [--admin admin]
 """
 import argparse
 import getpass
-import sqlite3
-from src.auth.user import hash_password, link_email
-from src.db.migrations import ensure_schema
 
-MIN_PASSWORD_LENGTH = 10
+from src.auth.user import MIN_PASSWORD_LENGTH
+from src.auth.user_repository import UserRepository
 
 
 def seed_user(db_path: str, username: str, password: str, role: str) -> bool:
     """Creates the account unless the username exists; returns whether it was created."""
-    if len(password) < MIN_PASSWORD_LENGTH:
-        raise ValueError(f"password must be at least {MIN_PASSWORD_LENGTH} characters")
-    conn = sqlite3.connect(db_path)
-    try:
-        ensure_schema(conn)
-        cursor = conn.execute(
-            "INSERT OR IGNORE INTO User (username, password_hash, role) VALUES (?, ?, ?)",
-            (username, hash_password(password), role),
-        )
-        conn.commit()
-        return cursor.rowcount == 1
-    finally:
-        conn.close()
+    users = UserRepository(db_path)
+    if users.find(username):
+        return False
+    users.create_user(username, password, role)
+    return True
 
 
 def user_exists(db_path: str, username: str) -> bool:
-    conn = sqlite3.connect(db_path)
-    try:
-        ensure_schema(conn)
-        return conn.execute("SELECT 1 FROM User WHERE username = ?", (username,)).fetchone() is not None
-    finally:
-        conn.close()
+    return UserRepository(db_path).find(username) is not None
+
+
+def link_email(db_path: str, username: str, email: str) -> None:
+    users = UserRepository(db_path)
+    user = users.find(username)
+    if user is None:
+        raise ValueError(f"no user named {username!r}")
+    users.link_email(user["id"], email)
 
 
 def _ask_password(username: str) -> str:

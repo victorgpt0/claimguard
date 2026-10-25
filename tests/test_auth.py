@@ -62,8 +62,8 @@ def test_seed_user_is_idempotent_and_never_resets_a_password(tmp_db_path):
 
 def test_google_identity_signs_in_only_a_linked_verified_email(tmp_db_path):
     import pytest
-    from src.auth.user import link_email, user_for_google_identity
-    from src.db.seed import seed_user
+    from src.auth.user import user_for_google_identity
+    from src.db.seed import link_email, seed_user
     seed_user(tmp_db_path, "auditor", "auditor-pass-1", "Auditor")
     seed_user(tmp_db_path, "admin", "admin-pass-12", "Administrator")
     link_email(tmp_db_path, "auditor", " Auditor@Example.com ")

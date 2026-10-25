@@ -53,12 +53,17 @@ def config(tmp_path, monkeypatch):
                         "experiments_dir": str(tmp_path / "experiments")},
               "thresholds": {"retrain_trigger_count": 50}}
     monkeypatch.setattr("src.config.load_config", lambda *a, **k: config)
+    # Streamlit reads .streamlit/secrets.toml from the working directory: run away from the
+    # developer's own (Google credentials, #61) so each test sets exactly the secrets it needs.
+    monkeypatch.chdir(tmp_path)
     st.cache_resource.clear()  # get_config is cached across AppTest runs in one process
     return config
 
 
 AUDITOR = User(id=1, username="auditor", role="Auditor")
 ADMIN = User(id=2, username="admin", role="Administrator")
+AUDITOR_TABS = ["Overview", "Review queue", "Account"]
+ADMIN_TABS = ["Overview", "Model performance", "Feedback loop", "Users", "Activity log", "Account"]
 
 
 def _app(user: User | None = AUDITOR, last_active: float | None = None):
@@ -77,7 +82,7 @@ def _tab_labels(app):
 def _sign_in(app, username, password):
     app.text_input[0].input(username)
     app.text_input[1].input(password)
-    return app.button[0].click().run()
+    return next(b for b in app.button if b.label == "Sign in").click().run()
 
 
 def _report_picker(app):
@@ -113,16 +118,16 @@ def test_wrong_password_and_unknown_user_get_the_same_message(config):
 def test_signing_in_opens_the_role_tabs_and_signing_out_closes_them(config):
     app = _sign_in(_app(user=None), "auditor", "auditor-pass-1")
     assert not app.exception
-    assert _tab_labels(app) == ["Overview", "Review queue"]
+    assert _tab_labels(app) == AUDITOR_TABS
     app = next(b for b in app.sidebar.button if b.label == "Sign out").click().run()
     assert not app.tabs
     assert "user" not in app.session_state
 
 
 def test_each_role_sees_only_its_own_tabs(config):
-    assert _tab_labels(_app(AUDITOR)) == ["Overview", "Review queue"]
+    assert _tab_labels(_app(AUDITOR)) == AUDITOR_TABS
     admin = _app(ADMIN)
-    assert _tab_labels(admin) == ["Overview", "Model performance", "Feedback loop"]
+    assert _tab_labels(admin) == ADMIN_TABS
     assert not any(b.label == "Approved" for b in admin.button)  # no decisions for the admin
 
 
@@ -205,3 +210,89 @@ def test_retraining_notice_and_history_on_the_feedback_tab(config):
     table = next(d.value for d in app.dataframe if "promoted" in d.value.columns)
     assert table.iloc[0]["checkpoint"] == "20261020T093000Z"
     assert table.iloc[0]["promoted"] == "yes"
+
+
+# --- Accounts and activity log (#56) ----------------------------------------------------
+
+def _activity(config):
+    with sqlite3.connect(config["paths"]["db_path"]) as conn:
+        return conn.execute("SELECT user_id, action, detail FROM ActivityLog ORDER BY id").fetchall()
+
+
+def _form_input(app, label, value):
+    next(t for t in app.text_input if t.label.startswith(label)).input(value)
+
+
+def _submit(app, label):
+    return next(b for b in app.button if b.label == label).click().run()
+
+
+def test_sign_ins_and_decisions_are_logged_without_passwords(config):
+    _sign_in(_app(user=None), "auditor", "wrong-password")
+    app = _sign_in(_app(user=None), "auditor", "auditor-pass-1")
+    app = next(s for s in app.selectbox if s.label == "Lane").select("Text inconsistent").run()
+    app = next(b for b in app.button if b.label == "Approved").click().run()
+    next(b for b in app.sidebar.button if b.label == "Sign out").click().run()
+    assert _activity(config) == [(None, "sign_in_failed", "username: auditor"),
+                                 (1, "sign_in", "password"),
+                                 (1, "decision", "report #1: approved"),
+                                 (1, "sign_out", None)]
+    logged = " ".join(str(v) for row in _activity(config) for v in row)
+    assert "pass" not in logged.replace("password", "")  # neither password appears
+    assert "forceps" not in logged.lower()  # nor note text
+
+
+def test_auditor_changes_own_password(config):
+    app = _app(AUDITOR)
+    _form_input(app, "Current password", "wrong-password")
+    _form_input(app, "New password", "new-auditor-pass")
+    _form_input(app, "Repeat", "new-auditor-pass")
+    app = _submit(app, "Change password")
+    assert "The current password is incorrect." in [e.value for e in app.error]
+    _form_input(app, "Current password", "auditor-pass-1")
+    _form_input(app, "New password", "new-auditor-pass")
+    _form_input(app, "Repeat", "new-auditor-pass")
+    app = _submit(app, "Change password")
+    assert "Password changed." in [s.value for s in app.success]
+    assert _activity(config)[-1] == (1, "password_changed", None)
+    assert not _sign_in(_app(user=None), "auditor", "auditor-pass-1").tabs
+    assert _sign_in(_app(user=None), "auditor", "new-auditor-pass").tabs
+
+
+def test_admin_creates_an_account_that_can_sign_in(config):
+    app = _app(ADMIN)
+    _form_input(app, "Username", "auditor2")
+    _form_input(app, "Initial password", "short")
+    app = _submit(app, "Create account")
+    assert any("at least 10 characters" in e.value for e in app.error)
+    _form_input(app, "Username", "auditor2")
+    _form_input(app, "Initial password", "auditor2-pass-1")
+    _form_input(app, "Google account email", "Auditor2@Example.com")
+    app = _submit(app, "Create account")
+    assert not app.exception
+    users = next(d.value for d in app.dataframe if "role" in d.value.columns)
+    row = users[users["username"] == "auditor2"].iloc[0]
+    assert (row["role"], row["email"], row["active"]) == ("Auditor", "auditor2@example.com", "yes")
+    assert _activity(config)[-1] == (2, "user_created", "auditor2 (Auditor)")
+    assert _tab_labels(_sign_in(_app(user=None), "auditor2", "auditor2-pass-1")) == AUDITOR_TABS
+
+
+def test_admin_deactivates_an_auditor_who_is_then_signed_out(config):
+    app = _app(ADMIN)
+    app = next(s for s in app.selectbox if s.label == "Account").select("auditor").run()
+    app = _submit(app, "Deactivate")
+    assert _activity(config)[-1] == (2, "user_deactivated", "auditor")
+    assert not _app(AUDITOR).tabs  # the open session ends on its next run
+    assert not _sign_in(_app(user=None), "auditor", "auditor-pass-1").tabs
+    app = next(s for s in _app(ADMIN).selectbox if s.label == "Account").select("admin").run()
+    app = _submit(app, "Deactivate")
+    assert "You cannot deactivate your own account." in [e.value for e in app.error]
+
+
+def test_activity_log_tab_filters_by_user(config):
+    _sign_in(_app(user=None), "auditor", "auditor-pass-1")
+    _sign_in(_app(user=None), "admin", "admin-pass-12")
+    app = _app(ADMIN)
+    app = next(s for s in app.selectbox if s.label == "User").select("auditor").run()
+    log = next(d.value for d in app.dataframe if "action" in d.value.columns)
+    assert list(log["username"]) == ["auditor"] and list(log["action"]) == ["sign_in"]

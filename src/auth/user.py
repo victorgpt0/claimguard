@@ -11,6 +11,8 @@ import sqlite3
 from dataclasses import dataclass
 
 _PBKDF2_ITERATIONS = 600_000  # OWASP 2023+ guidance for PBKDF2-HMAC-SHA256
+MIN_PASSWORD_LENGTH = 10
+ROLES = ("Auditor", "Administrator")
 
 
 @dataclass
@@ -40,12 +42,12 @@ def verify_password(password: str, stored_hash: str) -> bool:
 
 def authenticate(db_path: str, username: str, password: str) -> User | None:
     """NFR-03: only authenticated users access any audit report. Returns None on any
-    failure (unknown username or wrong password) — deliberately not distinguishing the
-    two in the return value, so a caller can't use response shape to enumerate usernames."""
+    failure (unknown username, wrong password or a deactivated account) — deliberately not
+    distinguishing them in the return value, so a caller can't use response shape to enumerate usernames."""
     conn = sqlite3.connect(db_path)
     try:
         row = conn.execute(
-            "SELECT id, username, password_hash, role FROM User WHERE username = ?",
+            "SELECT id, username, password_hash, role FROM User WHERE username = ? AND active = 1",
             (username,),
         ).fetchone()
     finally:
@@ -63,26 +65,6 @@ def normalise_email(email: str) -> str:
     return email.strip().lower()
 
 
-def link_email(db_path: str, username: str, email: str) -> None:
-    """#61: links a Google account to an existing user. Raises ValueError for an unknown
-    user or an email already linked to someone else."""
-    from src.db.migrations import ensure_schema
-
-    conn = sqlite3.connect(db_path)
-    try:
-        ensure_schema(conn)
-        try:
-            cursor = conn.execute("UPDATE User SET email = ? WHERE username = ?",
-                                  (normalise_email(email), username))
-        except sqlite3.IntegrityError:
-            raise ValueError(f"{email} is already linked to another user") from None
-        if cursor.rowcount == 0:
-            raise ValueError(f"no user named {username!r}")
-        conn.commit()
-    finally:
-        conn.close()
-
-
 def user_for_google_identity(db_path: str, identity: dict) -> User | None:
     """#61: Google proves who someone is; the User table decides whether they get in. Returns
     the user whose linked email matches a *verified* Google email, or None, so a Google
@@ -92,7 +74,7 @@ def user_for_google_identity(db_path: str, identity: dict) -> User | None:
         return None
     conn = sqlite3.connect(db_path)
     try:
-        row = conn.execute("SELECT id, username, role FROM User WHERE email = ?",
+        row = conn.execute("SELECT id, username, role FROM User WHERE email = ? AND active = 1",
                            (normalise_email(email),)).fetchone()
     except sqlite3.OperationalError:  # a database from before the email column
         return None

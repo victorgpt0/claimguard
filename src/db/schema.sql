@@ -8,7 +8,19 @@ CREATE TABLE IF NOT EXISTS User (
     username      TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     role          TEXT NOT NULL CHECK (role IN ('Auditor', 'Administrator')),
-    email         TEXT    -- linked Google account (#61); unique through idx_user_email
+    email         TEXT,   -- linked Google account (#61); unique through idx_user_email
+    active        INTEGER NOT NULL DEFAULT 1,  -- #56: deactivated, never deleted
+    created_at    TEXT
+);
+
+-- #56: who did what and when (sign-ins, decisions, account changes). Never holds a
+-- password or clinical-note text.
+CREATE TABLE IF NOT EXISTS ActivityLog (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES User(id),  -- NULL for a failed sign-in
+    action  TEXT NOT NULL,
+    detail  TEXT,
+    at      TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS Claim (
@@ -48,3 +60,4 @@ CREATE TABLE IF NOT EXISTS AuditReport (
 
 CREATE INDEX IF NOT EXISTS idx_auditreport_status ON AuditReport(status);
 CREATE INDEX IF NOT EXISTS idx_claim_provider ON Claim(provider_id);
+CREATE INDEX IF NOT EXISTS idx_activity_at ON ActivityLog(at);

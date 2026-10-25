@@ -13,6 +13,8 @@ ADDED_COLUMNS = (
     ("AuditReport", "flag_sources", "TEXT"),
     ("Claim", "claim_ref", "TEXT"),
     ("User", "email", "TEXT"),  # #61: the Google account linked to this user
+    ("User", "active", "INTEGER NOT NULL DEFAULT 1"),  # #56
+    ("User", "created_at", "TEXT"),  # #56
 )
 
 

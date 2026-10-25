@@ -1,6 +1,7 @@
 """Streamlit dashboard entrypoint (IR-03): sign-in first (NFR-03), then the tabs of the
-signed-in user's role. The Fraud Auditor sees Overview and Review queue; the Administrator
-sees Overview, Model performance and Feedback loop.
+signed-in user's role. The Fraud Auditor sees Overview, Review queue and Account; the
+Administrator sees Overview, Model performance, Feedback loop, Users, Activity log and
+Account. Sign-ins, decisions and account changes are written to the activity log (#56).
 
 - Overview: statistics and charts over every audit report in the database, plus the
   latest pipeline run's funnel when its log is available.
@@ -23,7 +24,10 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from src.auth.user import User, authenticate, user_for_google_identity
+from src.auth import activity_log as log
+from src.auth.activity_log import ActivityLog
+from src.auth.user import MIN_PASSWORD_LENGTH, ROLES, User, authenticate, user_for_google_identity
+from src.auth.user_repository import UserRepository
 from src.classification.export import reference_text
 from src.config import load_config
 from src.feedback.feedback_repository import FeedbackRepository
@@ -48,6 +52,20 @@ def get_config():
 @st.cache_resource
 def get_repository(db_path: str) -> AuditReportRepository:
     return AuditReportRepository(db_path)
+
+
+@st.cache_resource
+def get_users(db_path: str) -> UserRepository:
+    return UserRepository(db_path)
+
+
+@st.cache_resource
+def get_activity_log(db_path: str) -> ActivityLog:
+    return ActivityLog(db_path)
+
+
+def record_activity(config: dict, action: str, user: User | None = None, detail: str = ""):
+    get_activity_log(config["paths"]["db_path"]).record(action, user.id if user else None, detail)
 
 
 @st.cache_resource
@@ -281,6 +299,7 @@ def review_tab(repository: AuditReportRepository, config: dict):
     for col, decision in zip(st.columns(3), DECISIONS):
         if col.button(decision.capitalize(), key=f"decide_{decision}", width="stretch"):
             record_decision(repository, report, decision, config, st.session_state["user"])
+            record_activity(config, log.DECISION, st.session_state["user"], f"report #{report['id']}: {decision}")
             st.toast(f"Report #{report['id']}: {decision}")
             st.rerun()
 
@@ -495,6 +514,107 @@ def retraining_history(config: dict):
                "examples come from ground-truth decisions, not an auditor.")
 
 
+# --- Accounts and activity log (#56) ----------------------------------------------------------
+
+def account_tab(config: dict, user: User):
+    users = get_users(config["paths"]["db_path"])
+    me = users.get(user.id)
+    st.markdown(f"**{me['username']}** · {me['role']} · Google account: {me['email'] or 'not linked'}")
+    st.subheader("Change password")
+    with st.form("change_password", clear_on_submit=True):
+        current = st.text_input("Current password", type="password")
+        new = st.text_input(f"New password (at least {MIN_PASSWORD_LENGTH} characters)", type="password")
+        repeat = st.text_input("Repeat the new password", type="password")
+        submitted = st.form_submit_button("Change password")
+    if submitted:
+        try:
+            if new != repeat:
+                raise ValueError("The two new passwords differ.")
+            users.change_password(user.id, current, new)
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            record_activity(config, log.PASSWORD_CHANGED, user)
+            st.success("Password changed.")
+
+
+def users_tab(config: dict, admin: User):
+    users = get_users(config["paths"]["db_path"])
+    accounts = pd.DataFrame(users.list_users())
+    accounts["active"] = accounts["active"].map({1: "yes", 0: "no"})
+    st.dataframe(accounts[["username", "role", "email", "active", "created_at"]], hide_index=True)
+
+    st.subheader("Create an account")
+    with st.form("create_user", clear_on_submit=True):
+        cols = st.columns(2)
+        username = cols[0].text_input("Username")
+        role = cols[1].selectbox("Role", ROLES)
+        password = cols[0].text_input(f"Initial password (at least {MIN_PASSWORD_LENGTH} characters)",
+                                      type="password")
+        email = cols[1].text_input("Google account email (optional)")
+        submitted = st.form_submit_button("Create account")
+    if submitted:
+        try:
+            users.create_user(username, password, role, email or None)
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            record_activity(config, log.USER_CREATED, admin, f"{username.strip()} ({role})")
+            st.success(f"Created {role} '{username.strip()}'.")
+            st.rerun()
+
+    st.subheader("Manage an account")
+    by_name = {row["username"]: row for row in users.list_users()}
+    target = by_name[st.selectbox("Account", list(by_name))]
+    cols = st.columns(3)
+    with cols[0]:
+        label = "Deactivate" if target["active"] else "Reactivate"
+        if st.button(label, key="toggle_active"):
+            try:
+                users.set_active(target["id"], not target["active"], acting_user_id=admin.id)
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                action = log.USER_DEACTIVATED if target["active"] else log.USER_REACTIVATED
+                record_activity(config, action, admin, target["username"])
+                st.rerun()
+    with cols[1], st.form("reset_password", clear_on_submit=True):
+        new = st.text_input("New password", type="password")
+        if st.form_submit_button("Reset password"):
+            try:
+                users.reset_password(target["id"], new)
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                record_activity(config, log.PASSWORD_RESET, admin, target["username"])
+                st.success(f"Password reset for '{target['username']}'.")
+    with cols[2], st.form("link_email", clear_on_submit=True):
+        email = st.text_input("Google account email", placeholder=target["email"] or "blank unlinks")
+        if st.form_submit_button("Link Google account"):
+            try:
+                users.link_email(target["id"], email)
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                record_activity(config, log.EMAIL_LINKED, admin, f"{target['username']}: {email.strip() or 'unlinked'}")
+                st.rerun()
+
+
+def activity_tab(config: dict, admin: User):
+    activity = get_activity_log(config["paths"]["db_path"])
+    usernames = sorted(row["username"] for row in get_users(config["paths"]["db_path"]).list_users())
+    cols = st.columns(2)
+    username = cols[0].selectbox("User", ["All", *usernames])
+    action = cols[1].selectbox("Action", ["All", *sorted(log.ACTIONS)])
+    entries = pd.DataFrame(activity.entries(None if username == "All" else username,
+                                            None if action == "All" else action),
+                           columns=["id", "at", "username", "action", "detail"])
+    st.caption(f"{len(entries)} entries, newest first. Times are UTC.")
+    st.dataframe(entries.drop(columns="id"), hide_index=True)
+    st.download_button("Download as CSV", entries.to_csv(index=False), "activity_log.csv", "text/csv",
+                       on_click=record_activity, args=(config, log.LOG_DOWNLOADED, admin))
+
+
 # --- Sign-in (NFR-03) ---------------------------------------------------------------------
 
 AUDITOR, ADMINISTRATOR = "Auditor", "Administrator"
@@ -518,7 +638,9 @@ def google_signed_in() -> bool:
     return google_configured() and bool(st.user.get("is_logged_in", False))
 
 
-def sign_out():
+def sign_out(config: dict, action: str = log.SIGN_OUT):
+    if st.session_state.get("user") is not None:
+        record_activity(config, action, st.session_state["user"])
     via_google = st.session_state.get("via") == "google"
     for key in ("user", "last_active", "via"):
         st.session_state.pop(key, None)
@@ -538,13 +660,18 @@ def current_user(config: dict) -> User | None:
         user = user_for_google_identity(config["paths"]["db_path"], dict(st.user))
         if user is None:
             st.session_state["google_refused"] = st.user.get("email") or "this Google account"
+            record_activity(config, log.SIGN_IN_REFUSED, detail=st.session_state["google_refused"])
             return None
         start_session(user, "google")
+        record_activity(config, log.SIGN_IN, user, "google")
     if user is None:
         return None
     if time.time() - st.session_state.get("last_active", 0) > session_timeout_seconds(config):
         st.session_state["expired"] = True
-        sign_out()
+        sign_out(config, log.SESSION_EXPIRED)
+        return None
+    if not get_users(config["paths"]["db_path"]).is_active(user.id):
+        sign_out(config)  # deactivated by the Administrator while signed in
         return None
     st.session_state["last_active"] = time.time()
     return user
@@ -573,10 +700,12 @@ def sign_in_form(config: dict):
         # One message for an unknown user and a wrong password, so usernames can't be probed.
         user = authenticate(config["paths"]["db_path"], username.strip(), password)
         if user is None:
+            record_activity(config, log.SIGN_IN_FAILED, detail=f"username: {username.strip()[:64]}")
             st.error("Incorrect username or password.")
             return
         st.session_state.pop("google_refused", None)
         start_session(user, "password")
+        record_activity(config, log.SIGN_IN, user, "password")
         st.rerun()
 
 
@@ -597,7 +726,7 @@ def main():
     with st.sidebar:
         st.markdown(f"Signed in as **{user.username}** ({user.role})")
         if st.button("Sign out"):
-            sign_out()
+            sign_out(config)
             st.rerun()
 
     st.title("ClaimGuard")
@@ -605,8 +734,9 @@ def main():
     reports = pd.DataFrame(repository.get_all_reports())
     # The role decides which tabs exist at all, so a tab's data is never read for the
     # wrong role (IR-03, NFR-03).
-    tabs = {AUDITOR: ["Overview", "Review queue"],
-            ADMINISTRATOR: ["Overview", "Model performance", "Feedback loop"]}[user.role]
+    tabs = {AUDITOR: ["Overview", "Review queue", "Account"],
+            ADMINISTRATOR: ["Overview", "Model performance", "Feedback loop", "Users", "Activity log",
+                            "Account"]}[user.role]
     for name, tab in zip(tabs, st.tabs(tabs)):
         with tab:
             if name == "Overview":
@@ -617,6 +747,12 @@ def main():
                 model_tab(config)
             elif name == "Feedback loop":
                 feedback_tab(config)
+            elif name == "Users":
+                users_tab(config, user)
+            elif name == "Activity log":
+                activity_tab(config, user)
+            elif name == "Account":
+                account_tab(config, user)
 
 
 if __name__ == "__main__":
