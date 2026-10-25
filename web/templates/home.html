@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>ClaimGuard</title></head>
+<body>
+<h1>ClaimGuard</h1>
+<p>Signed in as {{ user.username }} ({{ user.role }}).</p>
+{% if user.is_administrator %}<p><a href="{% url 'admin:index' %}">Administration</a></p>{% endif %}
+<form method="post" action="{% url 'account_logout' %}">{% csrf_token %}<button>Sign out</button></form>
+</body></html>

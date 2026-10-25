@@ -11,8 +11,49 @@
 # unresponsiveness. `restart: no` (the default, made explicit) so it doesn't silently sit
 # in the background consuming RAM between sessions — start it deliberately when needed:
 # `docker compose up -d`, and `docker compose down` when done with it for the session.
+# The application stack (docs/platform_plan.md): `docker compose up -d db redis web`, then
+# http://localhost:8000. Values come from .env (copy .env.example). The ICD-11 container is
+# behind the "icd11" profile, so it starts only when asked for: `docker compose --profile
+# icd11 up -d icd11-api`.
 services:
+  db:
+    image: postgres:17.6
+    environment:
+      POSTGRES_DB: claimguard
+      POSTGRES_USER: claimguard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-claimguard-dev}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U claimguard"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4
+    ports:
+      - "6379:6379"
+
+  web:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgres://claimguard:${POSTGRES_PASSWORD:-claimguard-dev}@db:5432/claimguard
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
   icd11-api:
+    profiles: ["icd11"]
     image: whoicd/icd-api:latest
     ports:
       - "8081:80"   # host:container — host port 8081 to avoid clashing with anything else
@@ -22,3 +63,6 @@ services:
       - saveAnalytics=false
     mem_limit: 2560m
     restart: "no"
+
+volumes:
+  pgdata:

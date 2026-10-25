@@ -1,0 +1,68 @@
+[project]
+name = "claimguard"
+version = "0.9.0"
+description = "Post-payment fraud audit for SHA claims: anomaly detection, a fine-tuned clinical classifier and an explanation-only LLM"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+# Shared by every part: the ML library in src/, the web application in web/ and the workers.
+dependencies = [
+    "pandas>=2.2.3",
+    "pyarrow>=17.0.0",
+    "numpy>=2.0",
+    "scikit-learn>=1.5.2",
+    "PyYAML>=6.0.2",
+    "python-dotenv>=1.0.1",
+    "requests>=2.32.3",
+]
+
+[dependency-groups]
+# The Django application (docs/platform_plan.md): web server, accounts, jobs.
+web = [
+    "django>=5.2,<5.3",                       # 5.2 LTS, supported to April 2028
+    "django-allauth[socialaccount]>=65.0",
+    "celery[redis]>=5.4",
+    "psycopg[binary]>=3.2",
+    "dj-database-url>=2.2",
+    "gunicorn>=23.0",
+    "whitenoise>=6.7",
+]
+# The pipeline's models. Locally torch comes from the CPU-only index (tool.uv.sources);
+# Colab keeps its preinstalled CUDA build.
+ml = [
+    "torch>=2.5.0",
+    "transformers>=4.45.0",
+    "peft>=0.13.0",
+    "shap>=0.46.0",
+    "huggingface_hub>=0.25.0,<2",             # 2.x drops InferenceClient.text_generation (#53)
+    "openai>=1.40.0",
+]
+# The Streamlit dashboard, kept until the Django screens replace it (phase 2).
+streamlit = [
+    "streamlit>=1.38.0",
+    "Authlib>=1.3.2",
+    "altair>=5.0",
+]
+dev = [
+    "pytest>=8.3.2",
+    "pytest-mock>=3.14.0",
+    "pytest-django>=4.9",
+]
+
+[tool.uv]
+default-groups = ["web", "ml", "streamlit", "dev"]
+package = false
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "claimguard_web.settings"
+pythonpath = [".", "web"]
+testpaths = ["tests", "web"]
+python_files = ["test_*.py"]
