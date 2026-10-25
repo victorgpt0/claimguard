@@ -51,12 +51,12 @@ def test_linked_emails_are_unique_and_lowercase(make_user):
 def test_pages_need_sign_in_and_sign_in_is_logged(make_user):
     make_user()
     client = Client()
-    response = client.get(reverse("home"))
+    response = client.get(reverse("audit:overview"))
     assert response.status_code == 302 and reverse("account_login") in response["Location"]
     client.post(reverse("account_login"), {"login": "auditor", "password": "wrong-password"})
     response = client.post(reverse("account_login"), {"login": "auditor", "password": "auditor-pass-1"})
     assert response.status_code == 302
-    assert "Signed in as auditor" in client.get(reverse("home")).content.decode()
+    assert "Sign out" in client.get(reverse("audit:overview")).content.decode()
     client.post(reverse("account_logout"))
     actions = list(ActivityLog.objects.order_by("id").values_list("action", "detail"))
     assert actions == [("sign_in_failed", "username: auditor"), ("sign_in", "password"), ("sign_out", "")]

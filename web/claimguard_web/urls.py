@@ -1,10 +1,10 @@
 from django.contrib import admin
 from django.urls import include, path
-
-from accounts import views as account_views
+from django.views.generic import RedirectView
 
 urlpatterns = [
-    path("", account_views.home, name="home"),
+    path("", RedirectView.as_view(pattern_name="audit:overview"), name="home"),
+    path("audit/", include("audit.urls")),
     path("accounts/", include("allauth.urls")),
     path("admin/", admin.site.urls),
 ]

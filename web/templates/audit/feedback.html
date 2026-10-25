@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block head_title %}Feedback loop{% endblock %}
+{% block content %}
+<h1>Feedback loop</h1>
+{% if trigger %}
+<div class="tiles">
+  <div class="tile"><span class="label">Feedback examples</span><span class="value">{{ total }}</span></div>
+  <div class="tile"><span class="label">Since last retraining</span><span class="value">{{ unconsumed }}</span></div>
+  <div class="tile"><span class="label">Retraining trigger</span><span class="value">{{ trigger }}</span></div>
+</div>
+<div class="progress" role="progressbar" aria-valuenow="{{ progress }}" aria-valuemin="0" aria-valuemax="100"><span style="width: {{ progress }}%"></span></div>
+<p class="caption">{{ unconsumed }} of {{ trigger }} examples toward the next retraining.</p>
+{% if due %}<p class="warning">Retraining due: run <code>python -m src.feedback.run_retraining</code> on Colab. It trains a candidate on the training split plus this feedback and promotes it only if it scores at least as well on the held-out test set (FR-14).</p>{% endif %}
+<p class="caption">Approve and reject decisions become labelled examples for the classifier: a rejection is labelled consistent, an approval of an inconsistent verdict inconsistent. Approving a consistent verdict and escalating add nothing.</p>
+
+<section class="card"><h2>Retraining history</h2>
+{% if history %}<table class="list"><thead><tr><th>Run</th><th>Checkpoint</th><th class="num">Examples</th><th class="num">Candidate F1</th><th class="num">Candidate recall</th><th class="num">Active F1</th><th>Promoted</th></tr></thead>
+<tbody>{% for row in history %}<tr><td>{{ row.run_at|slice:":16" }}</td><td>{{ row.checkpoint }}</td><td class="num">{{ row.feedback_examples }}{% if row.simulated_examples %} ({{ row.simulated_examples }} simulated){% endif %}</td>
+<td class="num">{{ row.candidate_metrics.f1|floatformat:3 }}</td><td class="num">{{ row.candidate_metrics.recall|floatformat:3 }}</td><td class="num">{{ row.active_metrics.f1|floatformat:3 }}</td><td>{{ row.promoted|yesno:"yes,no" }}</td></tr>{% endfor %}</tbody></table>
+<p class="caption">F1 and recall on the held-out test set, the promotion gate (FR-14).</p>
+{% else %}<p class="caption">No retraining run yet.</p>{% endif %}</section>
+
+{% if examples %}<section class="card"><h2>Latest feedback examples</h2>
+<table class="list"><thead><tr><th>Claim</th><th>Code</th><th>Verdict</th><th>Decision</th><th>Label</th></tr></thead>
+<tbody>{% for e in examples %}<tr><td>{{ e.claim_id }}</td><td>{{ e.icd11_code }}</td><td>{{ e.classifier_verdict }}</td><td>{{ e.auditor_decision }}{% if e.simulated %} (simulated){% endif %}</td><td>{{ e.label }}</td></tr>{% endfor %}</tbody></table>
+</section>{% endif %}
+{% endif %}
+{% endblock %}

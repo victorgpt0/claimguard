@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{# allauth's pages (sign in, change password, Google) fill "content"; they get the app's layout. #}
+{% block body %}<section class="narrow card">{% block content %}{% endblock %}</section>{% endblock %}
