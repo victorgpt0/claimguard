@@ -143,7 +143,7 @@ def decide(request, pk: int):
         messages.error(request, "Unknown decision.")
         return redirect("audit:report", pk=pk)
     with transaction.atomic():
-        report = get_object_or_404(AuditReport.objects.select_for_update().select_related("claim", "verdict"), pk=pk)
+        report = get_object_or_404(AuditReport.objects.select_for_update(of=("self",)).select_related("claim", "verdict"), pk=pk)
         if report.status != AuditReport.Status.PENDING:
             messages.warning(request, f"Report #{pk} was already {report.status}.")
             return redirect("audit:queue")
