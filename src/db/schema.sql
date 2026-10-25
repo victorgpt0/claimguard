@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS User (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     username      TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
-    role          TEXT NOT NULL CHECK (role IN ('Auditor', 'Administrator'))
+    role          TEXT NOT NULL CHECK (role IN ('Auditor', 'Administrator')),
+    email         TEXT    -- linked Google account (#61); unique through idx_user_email
 );
 
 CREATE TABLE IF NOT EXISTS Claim (

@@ -23,7 +23,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from src.auth.user import User, authenticate
+from src.auth.user import User, authenticate, user_for_google_identity
 from src.classification.export import reference_text
 from src.config import load_config
 from src.feedback.feedback_repository import FeedbackRepository
@@ -506,19 +506,45 @@ def session_timeout_seconds(config: dict) -> float:
     return float(minutes) * 60
 
 
+def google_configured() -> bool:
+    """#61: Google sign-in is offered only when .streamlit/secrets.toml has [auth.google]."""
+    try:
+        return "google" in (st.secrets.get("auth") or {})
+    except (FileNotFoundError, KeyError, AttributeError):  # no secrets file at all
+        return False
+
+
+def google_signed_in() -> bool:
+    return google_configured() and bool(st.user.get("is_logged_in", False))
+
+
 def sign_out():
-    for key in ("user", "last_active"):
+    via_google = st.session_state.get("via") == "google"
+    for key in ("user", "last_active", "via"):
         st.session_state.pop(key, None)
+    if via_google and google_signed_in():
+        st.logout()  # also clears Streamlit's identity cookie, or the next run signs back in
+
+
+def start_session(user: User, via: str):
+    st.session_state.update(user=user, last_active=time.time(), via=via)
 
 
 def current_user(config: dict) -> User | None:
-    """The signed-in user, or None. A session idle for longer than the timeout is signed out."""
+    """The signed-in user, or None. A session idle for longer than the timeout is signed out.
+    A Google identity becomes a session only for a linked account (user_for_google_identity)."""
     user = st.session_state.get("user")
+    if user is None and google_signed_in() and not st.session_state.get("google_refused"):
+        user = user_for_google_identity(config["paths"]["db_path"], dict(st.user))
+        if user is None:
+            st.session_state["google_refused"] = st.user.get("email") or "this Google account"
+            return None
+        start_session(user, "google")
     if user is None:
         return None
     if time.time() - st.session_state.get("last_active", 0) > session_timeout_seconds(config):
-        sign_out()
         st.session_state["expired"] = True
+        sign_out()
         return None
     st.session_state["last_active"] = time.time()
     return user
@@ -529,6 +555,16 @@ def sign_in_form(config: dict):
     st.caption("SHA post-payment fraud audit · sign in to continue")
     if st.session_state.pop("expired", False):
         st.info("Your session expired. Sign in again.")
+    refused = st.session_state.get("google_refused")
+    if refused:
+        st.error(f"{refused} is not linked to a ClaimGuard account. Ask the Administrator to "
+                 "link it, or sign in with a username and password.")
+        if st.button("Use another Google account"):
+            st.session_state.pop("google_refused")
+            st.logout()
+    elif google_configured():
+        st.button("Sign in with Google", on_click=st.login, args=("google",))
+        st.caption("or with a username and password:")
     with st.form("sign_in"):
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
@@ -539,8 +575,8 @@ def sign_in_form(config: dict):
         if user is None:
             st.error("Incorrect username or password.")
             return
-        st.session_state["user"] = user
-        st.session_state["last_active"] = time.time()
+        st.session_state.pop("google_refused", None)
+        start_session(user, "password")
         st.rerun()
 
 

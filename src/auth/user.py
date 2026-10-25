@@ -1,7 +1,6 @@
-"""User entity + authenticate() (NFR-03). Retained for authentication and role-checking
-even though in-app account management is out of scope (FR-11 scope note, per the scope
-audit in feedback_resolution_matrix.md rows 6-7) — the two accounts (Auditor,
-Administrator) are seeded directly at setup, not created through the system.
+"""User entity, password sign-in (`authenticate`) and Google sign-in lookup (NFR-03, #55,
+#61). The first Administrator is seeded at setup (src.db.seed); a Google account signs in
+only as the user it has been linked to.
 """
 from __future__ import annotations
 
@@ -58,3 +57,45 @@ def authenticate(db_path: str, username: str, password: str) -> User | None:
     if not verify_password(password, password_hash):
         return None
     return User(id=user_id, username=db_username, role=role)
+
+
+def normalise_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def link_email(db_path: str, username: str, email: str) -> None:
+    """#61: links a Google account to an existing user. Raises ValueError for an unknown
+    user or an email already linked to someone else."""
+    from src.db.migrations import ensure_schema
+
+    conn = sqlite3.connect(db_path)
+    try:
+        ensure_schema(conn)
+        try:
+            cursor = conn.execute("UPDATE User SET email = ? WHERE username = ?",
+                                  (normalise_email(email), username))
+        except sqlite3.IntegrityError:
+            raise ValueError(f"{email} is already linked to another user") from None
+        if cursor.rowcount == 0:
+            raise ValueError(f"no user named {username!r}")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def user_for_google_identity(db_path: str, identity: dict) -> User | None:
+    """#61: Google proves who someone is; the User table decides whether they get in. Returns
+    the user whose linked email matches a *verified* Google email, or None, so a Google
+    account nobody has linked never reaches a report (NFR-03)."""
+    email = identity.get("email")
+    if not email or identity.get("email_verified") is not True:
+        return None
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute("SELECT id, username, role FROM User WHERE email = ?",
+                           (normalise_email(email),)).fetchone()
+    except sqlite3.OperationalError:  # a database from before the email column
+        return None
+    finally:
+        conn.close()
+    return User(id=row[0], username=row[1], role=row[2]) if row else None

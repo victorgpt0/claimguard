@@ -19,6 +19,8 @@ transformers>=4.45.0
 peft>=0.13.0
 shap>=0.46.0
 streamlit>=1.38.0
+# Sign in with Google through Streamlit's built-in OpenID Connect (st.login, #61)
+Authlib>=1.3.2
 requests>=2.32.3
 huggingface_hub>=0.25.0,<2   # 2.x drops InferenceClient.text_generation, used by narrative_generator (#53)
 python-dotenv>=1.0.1

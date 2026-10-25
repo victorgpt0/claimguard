@@ -138,6 +138,17 @@ the Fraud Auditor sees Overview and Review queue, and every decision is stored w
 auditor's identity (FR-09); the Administrator sees Overview, Model performance and Feedback
 loop. A session idle for `auth.session_timeout_minutes` (default 30) is signed out.
 
+**Sign in with Google (optional, #61).** Copy `.streamlit/secrets.example.toml` to
+`.streamlit/secrets.toml` (gitignored) and fill in an OAuth client from Google Cloud Console
+(APIs & Services, Credentials, OAuth client ID, type Web application, authorised redirect
+URI `http://localhost:8501/oauth2callback`). Google only proves who someone is: a Google
+account gets in only after it is linked to an existing user, and then with that user's role.
+```bash
+python -m src.db.seed --db-path <db> --link-email auditor someone@gmail.com
+```
+Without `secrets.toml` the button is hidden and password sign-in works as before. Passwords
+are stored only as salted PBKDF2-SHA256 hashes.
+
 **Before Sprint 3** (ICD-11 integration), refresh the local ICD-11 cache once against the
 running container rather than requiring live access on every claim:
 ```bash

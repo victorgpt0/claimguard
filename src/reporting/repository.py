@@ -13,10 +13,10 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from pathlib import Path
+
+from src.db.migrations import ensure_schema as ensure_schema_of
 
 VALID_DECISIONS = {"approved", "rejected", "escalated"}
-SCHEMA_PATH = Path(__file__).resolve().parent.parent / "db" / "schema.sql"
 
 
 class AuditReportRepository:
@@ -24,12 +24,7 @@ class AuditReportRepository:
         self.db_path = db_path
         if ensure_schema:
             with self._connect() as conn:
-                conn.executescript(SCHEMA_PATH.read_text())
-                # Databases created before these columns existed (e.g. the TC-028 run).
-                for table, column in (("AuditReport", "flag_sources"), ("Claim", "claim_ref")):
-                    columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
-                    if column not in columns:
-                        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} TEXT")
+                ensure_schema_of(conn)
 
     @contextmanager
     def _connect(self):

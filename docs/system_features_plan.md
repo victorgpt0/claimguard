@@ -127,6 +127,18 @@ report without signing in.
 - Tests: summary counts on a seeded database; both downloads produce the expected
   columns and sections.
 
+### G. Sign in with Google (#61, added 25 Oct)
+- Streamlit's built-in OpenID Connect (`st.login("google")`, Authlib); credentials in
+  `.streamlit/secrets.toml`, gitignored, with `secrets.example.toml` as the template.
+- Google proves identity only. The verified Google email must equal an account's
+  `User.email` (unique, linked by the Administrator: `src.db.seed --link-email` now, the
+  Users tab after #56). Unlinked or unverified accounts are refused with a clear message.
+- Password sign-in stays, as the fallback for an offline demo. Sign-out and the idle
+  timeout also clear Streamlit's identity cookie.
+- Tests: linked, case-insensitive, unverified, unlinked and missing emails; an old database
+  gains `User.email`; the button appears only when configured. The real Google redirect
+  can only be checked by hand once the OAuth client exists.
+
 ### F. Documentation (see the next section)
 
 Suggested order: A, B, C, D, E, F. A and C are the minimum for the "complete system" demo;
@@ -167,6 +179,7 @@ splits (recommended), or remove the TC-034 rows for a slice of the pool before t
 - **New FR-15** (input validation), **FR-16** (batch summary report), **FR-17** (user
   account management by the Administrator) and **FR-18** (activity log); and add them to
   Table 4.1.
+- **New IR-07** (Google OpenID Connect sign-in, linked accounts only) in 4.2.4 and Table 4.1.
 - **NFR-03:** replace "The two user accounts are seeded at setup" with "One Administrator
   account is seeded at setup; the Administrator creates and deactivates other accounts. All
   sign-ins and actions are recorded in an activity log."

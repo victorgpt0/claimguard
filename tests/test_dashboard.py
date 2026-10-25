@@ -91,6 +91,18 @@ def test_nothing_but_the_sign_in_form_without_a_session(config):
     assert [t.label for t in app.text_input] == ["Username", "Password"]
 
 
+def test_google_button_only_when_configured(config):
+    assert not any(b.label == "Sign in with Google" for b in _app(user=None).button)
+    app = AppTest.from_file(APP, default_timeout=30)
+    app.secrets["auth"] = {"redirect_uri": "http://localhost:8501/oauth2callback", "cookie_secret": "x",
+                           "google": {"client_id": "id", "client_secret": "secret",
+                                      "server_metadata_url": "https://accounts.google.com/.well-known/openid-configuration"}}
+    app.run()
+    assert not app.exception
+    assert any(b.label == "Sign in with Google" for b in app.button)
+    assert not app.tabs  # offering Google opens nothing by itself
+
+
 def test_wrong_password_and_unknown_user_get_the_same_message(config):
     for username, password in (("auditor", "wrong-password"), ("nobody", "auditor-pass-1")):
         app = _sign_in(_app(user=None), username, password)

@@ -58,3 +58,40 @@ def test_seed_user_is_idempotent_and_never_resets_a_password(tmp_db_path):
     assert authenticate(tmp_db_path, "admin", "second-password") is None
     with pytest.raises(ValueError):
         seed_user(tmp_db_path, "auditor", "short", "Auditor")
+
+
+def test_google_identity_signs_in_only_a_linked_verified_email(tmp_db_path):
+    import pytest
+    from src.auth.user import link_email, user_for_google_identity
+    from src.db.seed import seed_user
+    seed_user(tmp_db_path, "auditor", "auditor-pass-1", "Auditor")
+    seed_user(tmp_db_path, "admin", "admin-pass-12", "Administrator")
+    link_email(tmp_db_path, "auditor", " Auditor@Example.com ")
+    user = user_for_google_identity(tmp_db_path, {"email": "auditor@example.com", "email_verified": True})
+    assert (user.username, user.role) == ("auditor", "Auditor")
+    assert user_for_google_identity(tmp_db_path, {"email": "AUDITOR@example.com", "email_verified": True})
+    # Unverified, unlinked or missing emails never sign in.
+    assert user_for_google_identity(tmp_db_path, {"email": "auditor@example.com", "email_verified": False}) is None
+    assert user_for_google_identity(tmp_db_path, {"email": "auditor@example.com"}) is None
+    assert user_for_google_identity(tmp_db_path, {"email": "stranger@gmail.com", "email_verified": True}) is None
+    assert user_for_google_identity(tmp_db_path, {}) is None
+    with pytest.raises(ValueError, match="already linked"):
+        link_email(tmp_db_path, "admin", "auditor@example.com")
+    with pytest.raises(ValueError, match="no user"):
+        link_email(tmp_db_path, "nobody", "x@example.com")
+
+
+def test_old_database_gains_the_email_column(tmp_db_path):
+    """A database from before #61 (no User.email) is migrated in place, keeping its users."""
+    conn = sqlite3.connect(tmp_db_path)
+    conn.execute("CREATE TABLE User (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE, "
+                 "password_hash TEXT NOT NULL, role TEXT NOT NULL)")
+    conn.execute("INSERT INTO User (username, password_hash, role) VALUES (?, ?, ?)",
+                 ("auditor", hash_password("auditpass"), "Auditor"))
+    conn.commit()
+    conn.close()
+    from src.reporting.repository import AuditReportRepository
+    AuditReportRepository(tmp_db_path)
+    with sqlite3.connect(tmp_db_path) as conn:
+        assert "email" in {row[1] for row in conn.execute("PRAGMA table_info(User)")}
+    assert authenticate(tmp_db_path, "auditor", "auditpass").role == "Auditor"

@@ -6,6 +6,7 @@ venv/
 # tokens, or credentials in the repository; rotate immediately if one is ever committed)
 .env
 config/config.yaml
+.streamlit/secrets.toml
 
 # data and model artifacts — these live in Google Drive, not git (DR-05: generated data and
 # model checkpoints belong in a designated artifacts directory, separate from the operational
