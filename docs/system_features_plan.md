@@ -1,5 +1,10 @@
 # System features plan: login, roles, batch input and output (25 Oct)
 
+> **Superseded from item C onward (25 Oct):** the dashboard moves to Django, PostgreSQL and
+> Celery with a Colab GPU worker, after the held-out results are finished. See
+> `docs/platform_plan.md`. Items A, B and G were built on Streamlit (#55, #56, #61); their
+> rules carry over to the Django version.
+
 The supervisor asked for a complete system around the ML engine, not only the engine itself.
 This reverses the 12 Oct descoping of sign-in and roles. Decisions taken with the student on
 25 Oct:
