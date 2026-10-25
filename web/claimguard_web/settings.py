@@ -55,8 +55,10 @@ MIDDLEWARE = [
     "allauth.account.middleware.AccountMiddleware",
 ]
 
-if not DEBUG:  # runserver serves static files in development; WhiteNoise in deployment
-    MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
+# WhiteNoise serves static files under gunicorn in every mode (the Docker stack runs gunicorn
+# even with DEBUG on); in DEBUG it reads them straight from the app folders, no collectstatic.
+MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
+WHITENOISE_USE_FINDERS = DEBUG
 
 ROOT_URLCONF = "claimguard_web.urls"
 WSGI_APPLICATION = "claimguard_web.wsgi.application"

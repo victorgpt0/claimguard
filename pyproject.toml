@@ -66,3 +66,5 @@ DJANGO_SETTINGS_MODULE = "claimguard_web.settings"
 pythonpath = [".", "web"]
 testpaths = ["tests", "web"]
 python_files = ["test_*.py"]
+# WhiteNoise warns that STATIC_ROOT does not exist; tests never run collectstatic.
+filterwarnings = ["ignore:No directory at:UserWarning"]
