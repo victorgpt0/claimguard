@@ -9,6 +9,11 @@ paths:
   experiments_dir: /content/drive/MyDrive/claimguard/experiments
   db_path: /content/drive/MyDrive/claimguard/db/sha_fraud.sqlite
 
+# The web application's jobs (web/audit/tasks.py) fit stage 1 on this dataset's training
+# split (<data_dir>/processed/<dataset>/train.parquet) and use the active classifier.
+pipeline:
+  dataset: v0.6-20k
+
 thresholds:
   # Stage 1 (FR-02, #50), from `python -m src.detection.tune_stage1` on the v0.6-20k
   # validation split, 5 seeds (TC-032): the union of the three components reaches recall

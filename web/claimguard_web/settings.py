@@ -145,6 +145,12 @@ USE_TZ = True
 CELERY_BROKER_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = None   # progress lives in the Job table, not in Celery results
 CELERY_TASK_ALWAYS_EAGER = env_bool("CELERY_TASK_ALWAYS_EAGER", False)
+CELERY_TASK_DEFAULT_QUEUE = "cpu"
+# One long job at a time per worker, acknowledged only when it ends, so a worker that dies
+# (e.g. a Colab session that disconnects) leaves the job for the next worker.
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_ACKS_LATE = True
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
 # The ML pipeline's paths and thresholds (FR-10): the same config.yaml the scripts read.
 CLAIMGUARD_CONFIG = Path(os.environ.get("CLAIMGUARD_CONFIG", REPO_ROOT / "config" / "config.yaml"))

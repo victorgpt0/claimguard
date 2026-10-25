@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AuditReport, Batch, Claim, ClassifierVerdict
+from .models import AuditReport, Batch, Claim, ClassifierVerdict, Job
 
 
 @admin.register(Batch)
@@ -25,4 +25,10 @@ class AuditReportAdmin(admin.ModelAdmin):
 
 
 admin.site.register(ClassifierVerdict)
+
+
+@admin.register(Job)
+class JobAdmin(admin.ModelAdmin):
+    list_display = ("id", "batch", "queue", "status", "stage", "done", "total", "worker", "created_by", "created_at")
+    list_filter = ("status", "queue")
 admin.site.site_header = "ClaimGuard administration"

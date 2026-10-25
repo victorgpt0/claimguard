@@ -134,8 +134,12 @@ class AuditPipeline:
         self.reports = AuditReportGenerator(repository)
         self.narrator = narrator
 
-    def run(self, claims: pd.DataFrame, settings: dict | None = None) -> RunLog:
+    def run(self, claims: pd.DataFrame, settings: dict | None = None, progress=None) -> RunLog:
+        """`progress(stage, done, total)`, if given, is called as the run advances, so a
+        caller (the web application's job) can show it: "explaining" before KernelSHAP on
+        the flagged claims, then "auditing" once per claim."""
         log = RunLog(started_at=datetime.now(timezone.utc).isoformat(), settings=settings or {})
+        report = progress or (lambda stage, done, total: None)
         s1 = self.stage1
         aligned = s1.preprocessor.align_schema(claims)
         features = s1.preprocessor.feature_matrix(aligned)
@@ -147,6 +151,7 @@ class AuditPipeline:
         flagged = forest_flag | autoencoder_flag | screen_flag
 
         flagged_rows = np.flatnonzero(flagged)
+        report("explaining", 0, len(flagged_rows))
         attributions = s1.explainer.explain(features[flagged_rows]) if len(flagged_rows) else []
         attribution_by_row = dict(zip(flagged_rows.tolist(), attributions))
 
@@ -164,6 +169,7 @@ class AuditPipeline:
             if flagged[i]:
                 entry.update(self._audit(claim, attribution_by_row[i], float(forest_score[i]),
                                          entry["flag_sources"], log))
+            report("auditing", i + 1, len(aligned))
         return log
 
     def _audit(self, claim, attribution: dict, anomaly_score: float, sources: list[str],

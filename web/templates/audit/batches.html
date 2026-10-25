@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block head_title %}Batches{% endblock %}
+{% block content %}
+<h1>Batches</h1>
+{% if user.is_auditor %}<p><a class="button" href="{% url 'audit:upload' %}">Upload a claims batch</a></p>{% endif %}
+{% if batches %}
+<table class="list"><thead><tr><th>#</th><th>Name</th><th>Status</th><th class="num">Claims</th><th>Uploaded by</th><th>Uploaded</th></tr></thead>
+<tbody>{% for b in batches %}<tr><td><a href="{% url 'audit:batch' b.pk %}">#{{ b.pk }}</a></td><td>{{ b.name }}</td>
+<td><span class="badge status-{{ b.status }}">{{ b.get_status_display }}</span></td><td class="num">{{ b.claims_count }}</td>
+<td>{{ b.uploaded_by.username|default:"—" }}</td><td>{{ b.uploaded_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}</tbody></table>
+{% else %}<p class="empty">No batches yet.</p>{% endif %}
+{% endblock %}

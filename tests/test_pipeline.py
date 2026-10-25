@@ -183,3 +183,12 @@ def test_held_out_claims_never_reach_the_review_database(argv, message, monkeypa
     with pytest.raises(SystemExit):
         pipeline.main()
     assert message in capsys.readouterr().err
+
+
+def test_progress_is_reported(stage1, data, tmp_path):
+    pipeline, _, _ = _pipeline(stage1, tmp_path, None)
+    calls = []
+    log = pipeline.run(data[1], progress=lambda stage, done, total: calls.append((stage, done, total)))
+    n = len(data[1])
+    assert calls[0] == ("explaining", 0, sum(c["flagged"] for c in log.claims))
+    assert [c[1] for c in calls[1:]] == list(range(1, n + 1)) and calls[-1] == ("auditing", n, n)

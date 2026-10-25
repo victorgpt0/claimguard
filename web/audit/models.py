@@ -28,6 +28,12 @@ class Batch(models.Model):
     processed_at = models.DateTimeField(null=True, blank=True)
     error = models.TextField(blank=True)
     run_log = models.JSONField(null=True, blank=True)   # the pipeline's RunLog summary and settings
+    # The uploaded CSV as received (FR-01), kept in the database rather than as a file: the job
+    # processes it on whichever worker takes it, including the Colab worker, which shares the
+    # database but not this machine's disk. Every column the detectors need is kept, not only
+    # the ones the review pages show. Uploads are at most 10 MB.
+    source_csv = models.TextField(blank=True)
+    source_sha256 = models.CharField(max_length=64, blank=True)
 
     class Meta:
         ordering = ["-uploaded_at"]
@@ -41,7 +47,11 @@ class Claim(models.Model):
     batch = models.ForeignKey(Batch, null=True, blank=True, on_delete=models.PROTECT, related_name="claims")
     claim_ref = models.CharField("claim id", max_length=64)  # the submitter's own id
     provider_id = models.CharField(max_length=64, db_index=True)
-    patient_ref = models.CharField(max_length=64)
+    patient_ref = models.CharField("member id", max_length=64)
+    beneficiary_type = models.CharField(max_length=20, blank=True)
+    patient_age = models.FloatField(null=True, blank=True)
+    patient_sex = models.CharField(max_length=10, blank=True)
+    facility_level = models.PositiveSmallIntegerField(null=True, blank=True)
     icd11_code = models.CharField("ICD-11 code", max_length=32)
     claim_amount = models.DecimalField(max_digits=14, decimal_places=2)
     service_date = models.DateField()
@@ -108,3 +118,48 @@ class AuditReport(models.Model):
         if self.verdict.verdict == ClassifierVerdict.Verdict.INCONSISTENT:
             return self.Lane.TEXT_INCONSISTENT
         return self.Lane.STRUCTURAL_ANOMALY
+
+
+class Job(models.Model):
+    """One background run (Celery) over a batch, with its progress for the batch page. The
+    queue says where it runs: "cpu" on a local worker (stage 1, SHAP and the classifier, no
+    narratives), "gpu" on the Colab worker notebook (the same, with LLM narratives)."""
+
+    class Status(models.TextChoices):
+        QUEUED = "queued"
+        RUNNING = "running"
+        SUCCEEDED = "succeeded"
+        FAILED = "failed"
+
+    class Queue(models.TextChoices):
+        CPU = "cpu", "Local CPU (no narratives)"
+        GPU = "gpu", "Colab GPU (with narratives)"
+
+    batch = models.ForeignKey(Batch, on_delete=models.PROTECT, related_name="jobs")
+    queue = models.CharField(max_length=10, choices=Queue.choices)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.QUEUED)
+    stage = models.CharField(max_length=40, blank=True)
+    done = models.PositiveIntegerField(default=0)
+    total = models.PositiveIntegerField(default=0)
+    message = models.TextField(blank=True)
+    worker = models.CharField(max_length=200, blank=True)
+    task_id = models.CharField(max_length=64, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT,
+                                   related_name="jobs")
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Job #{self.pk} ({self.batch}, {self.queue})"
+
+    @property
+    def active(self) -> bool:
+        return self.status in (self.Status.QUEUED, self.Status.RUNNING)
+
+    @property
+    def percent(self) -> int:
+        return round(100 * self.done / self.total) if self.total else 0

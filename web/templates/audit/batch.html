@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block head_title %}Batch #{{ batch.pk }}{% endblock %}
+{% block extra_head %}<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>{% endblock %}
+{% block content %}
+<p><a href="{% url 'audit:batches' %}">← Batches</a></p>
+<h1>Batch #{{ batch.pk }} · {{ batch.name }} <span class="badge status-{{ batch.status }}">{{ batch.get_status_display }}</span></h1>
+<div class="tiles">
+  <div class="tile"><span class="label">Claims</span><span class="value">{{ batch.claims_count }}</span></div>
+  <div class="tile"><span class="label">Reports</span><span class="value">{{ reports }}</span>{% if reports and user.is_auditor %}<span class="note"><a href="{% url 'audit:queue' %}">Review queue</a></span>{% endif %}</div>
+  <div class="tile"><span class="label">Uploaded</span><span class="value small">{{ batch.uploaded_at|date:"Y-m-d H:i" }}</span><span class="note">by {{ batch.uploaded_by.username|default:"—" }}</span></div>
+</div>
+{% if batch.error %}<p class="warning">Last run failed: {{ batch.error }}</p>{% endif %}
+
+{% if job %}<section class="card"><h2>Processing</h2>
+  <div {% if job.active %}hx-get="{% url 'audit:job_progress' job.pk %}" hx-trigger="every 2s" hx-swap="innerHTML"{% endif %}>
+    {% include "audit/job_progress.html" %}
+  </div></section>{% endif %}
+
+{% if can_start %}
+<form method="post" action="{% url 'audit:start_job' batch.pk %}" class="card">{% csrf_token %}
+  <h2>Process this batch</h2>
+  <p class="caption">Runs the pipeline: stage 1 and SHAP, then the classifier on flagged claims. Narratives need the Colab GPU worker.</p>
+  {% for value, label in queues %}
+    <label class="choice"><input type="radio" name="queue" value="{{ value }}" {% if forloop.first %}checked{% endif %}>
+      {{ label }} — {% if value in workers %}<span class="online">worker online</span>{% else %}<span class="offline">no worker online</span>{% endif %}</label>
+  {% endfor %}
+  <p><button>Start processing</button></p>
+</form>
+{% endif %}
+{% if batch.run_log %}<section class="card"><h2>Run summary</h2>
+  {% with s=batch.run_log.summary %}<p>{{ s.claims }} claims screened, {{ s.flagged_stage1 }} flagged at stage 1
+  (Isolation Forest {{ s.flagged_by.isolation_forest }}, autoencoder {{ s.flagged_by.autoencoder }}, text screen {{ s.flagged_by.text_screen }});
+  queued for review: {{ s.reported.text_inconsistent }} text inconsistent, {{ s.reported.structural_anomaly }} structural anomaly;
+  {{ s.narratives }} narratives{% if s.narrative_failures %}, {{ s.narrative_failures }} failed{% endif %}.</p>{% endwith %}
+</section>{% endif %}
+{% endblock %}

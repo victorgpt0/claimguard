@@ -1,0 +1,9 @@
+<p><strong>Job #{{ job.pk }}</strong> on the {{ job.get_queue_display }} · <span class="badge status-{{ job.status }}">{{ job.status }}</span>
+{% if job.worker %}· {{ job.worker }}{% endif %}</p>
+{% if job.status == "queued" %}<p class="caption">Waiting for a worker on the {{ job.queue|upper }} queue.</p>{% endif %}
+{% if job.status == "running" %}
+  <p class="caption">{{ job.stage|capfirst }}{% if job.total %}: {{ job.done }} of {{ job.total }}{% endif %}</p>
+  <div class="progress" role="progressbar" aria-valuenow="{{ job.percent }}" aria-valuemin="0" aria-valuemax="100"><span style="width: {{ job.percent }}%"></span></div>
+{% endif %}
+{% if job.status == "succeeded" %}<p class="success-text">Done: {{ job.message }}.</p>{% endif %}
+{% if job.status == "failed" %}<p class="warning">Failed: {{ job.message|truncatechars:300 }}</p>{% endif %}

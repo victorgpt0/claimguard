@@ -81,3 +81,11 @@ button.rejected { border-color: var(--green); color: var(--green); }
 form p { margin: 0 0 12px; }
 form p label { display: block; font-size: .9rem; color: var(--muted); }
 form p input { width: 100%; }
+a.button { display: inline-block; padding: 6px 14px; border: 1px solid var(--accent); border-radius: 6px; text-decoration: none; }
+.badge.status-processed, .badge.status-succeeded, .badge.status-imported { background: var(--green-bg); color: var(--green); }
+.badge.status-failed { background: var(--red-bg); color: var(--red); }
+.badge.status-processing, .badge.status-running, .badge.status-queued { background: var(--amber-bg); color: var(--amber); }
+label.choice { display: block; margin: 6px 0; }
+.online { color: var(--green); } .offline { color: var(--muted); }
+.success-text { color: var(--green); }
+.tile .value.small { font-size: 1.05rem; }

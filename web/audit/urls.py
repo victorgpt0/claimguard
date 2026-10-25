@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import batch_views, views
 
 app_name = "audit"
 urlpatterns = [
@@ -10,4 +10,10 @@ urlpatterns = [
     path("reports/<int:pk>/decide/", views.decide, name="decide"),
     path("model/", views.model_performance, name="model"),
     path("feedback/", views.feedback_loop, name="feedback"),
+    path("batches/", batch_views.batch_list, name="batches"),
+    path("batches/upload/", batch_views.upload, name="upload"),
+    path("batches/template.csv", batch_views.upload_template, name="upload_template"),
+    path("batches/<int:pk>/", batch_views.batch_detail, name="batch"),
+    path("batches/<int:pk>/process/", batch_views.start_job, name="start_job"),
+    path("jobs/<int:pk>/progress/", batch_views.job_progress, name="job_progress"),
 ]
