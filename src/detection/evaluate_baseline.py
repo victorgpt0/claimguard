@@ -7,10 +7,12 @@ it is reserved for the final evaluation (Section 3.2.4).
 
     python -m src.detection.evaluate_baseline --data data/processed/v0.4-5k --out experiments
 
-With --predictions it also writes the validation predictions in the shared format
-(experiments/predictions/isolation_forest/validation.csv, src/evaluation/predictions.py),
-as the Isolation-Forest-only baseline of Section 3.2.4. --contamination uses a fixed value
-(e.g. the one task 6.2 chose) instead of tuning.
+With --predictions it also writes the predictions in the shared format
+(<predictions-root>/isolation_forest/<split>.csv, src/evaluation/predictions.py), as the
+Isolation-Forest-only baseline of Section 3.2.4. --contamination uses a fixed value (e.g.
+the one task 6.2 chose) instead of tuning. The final evaluation scores the test split with
+`--split test --final` and a fixed --contamination chosen on validation: nothing is tuned
+on the test split.
 """
 from __future__ import annotations
 
@@ -24,16 +26,19 @@ from sklearn.metrics import average_precision_score, precision_recall_fscore_sup
 
 from src.data.preprocessing import FEATURE_COLUMNS, ClaimsPreprocessor
 from src.detection.isolation_forest import IsolationForestDetector
-from src.evaluation.predictions import write_predictions
+from src.evaluation.predictions import PREDICTIONS_DIR, write_predictions
 
 
 def evaluate(data_dir: Path, seed: int = 42, contamination: float | None = None,
-             predictions: bool = False) -> dict:
+             predictions: bool = False, split: str = "validation",
+             predictions_root: Path = PREDICTIONS_DIR) -> dict:
     """`contamination` fixes the forest's contamination instead of tuning it on validation.
-    `predictions` writes the validation predictions (flagged, anomaly score) in the shared
-    format."""
+    `predictions` writes the split's predictions (flagged, anomaly score) in the shared
+    format. Any split other than validation needs a fixed `contamination`."""
+    if split != "validation" and contamination is None:
+        raise ValueError(f"contamination is tuned on validation only; pass a fixed value to score {split}")
     train = pd.read_parquet(data_dir / "train.parquet")
-    validation = pd.read_parquet(data_dir / "validation.parquet")
+    validation = pd.read_parquet(data_dir / f"{split}.parquet")
 
     preprocessor = ClaimsPreprocessor()
     train_x = preprocessor.feature_matrix(preprocessor.align_schema(train), fit=True)
@@ -53,8 +58,9 @@ def evaluate(data_dir: Path, seed: int = 42, contamination: float | None = None,
         val_y, flagged, average="binary", zero_division=0)
 
     if predictions:
-        write_predictions("isolation_forest", "validation", pd.DataFrame(
-            {"claim_id": validation["claim_id"].to_numpy(), "flagged": flagged, "score": scores}))
+        write_predictions("isolation_forest", split, pd.DataFrame(
+            {"claim_id": validation["claim_id"].to_numpy(), "flagged": flagged, "score": scores}),
+            predictions_root)
 
     by_typology = (pd.DataFrame({"typology": validation["fraud_typology"], "flagged": flagged})
                    .groupby("typology")["flagged"].agg(["size", "sum"]))
@@ -65,7 +71,7 @@ def evaluate(data_dir: Path, seed: int = 42, contamination: float | None = None,
         "features": FEATURE_COLUMNS,
         "contamination": contamination,
         "contamination_tuned": tuned,
-        "split": "validation",
+        "split": split,
         "claims": len(validation),
         "flagged": int(flagged.sum()),
         "precision": round(float(precision), 4),
@@ -90,12 +96,20 @@ def main() -> None:
     parser.add_argument("--contamination", type=float,
                         help="fixed contamination instead of tuning it on validation")
     parser.add_argument("--predictions", action="store_true",
-                        help="also write experiments/predictions/isolation_forest/validation.csv")
+                        help="also write <predictions-root>/isolation_forest/<split>.csv")
+    parser.add_argument("--predictions-root", type=Path, default=PREDICTIONS_DIR)
+    parser.add_argument("--split", default="validation", choices=["validation", "test"])
+    parser.add_argument("--final", action="store_true", help="required to score the test split")
     args = parser.parse_args()
+    if args.split == "test" and not args.final:
+        parser.error("the test split is reserved for the final evaluation; pass --final to score it")
+    if args.split == "test" and args.contamination is None:
+        parser.error("pass the --contamination chosen on validation; nothing is tuned on the test split")
 
-    results = evaluate(args.data, args.seed, args.contamination, args.predictions)
+    results = evaluate(args.data, args.seed, args.contamination, args.predictions, args.split,
+                       args.predictions_root)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    out = args.out / "isolation_forest" / f"{args.data.name}_{stamp}.json"
+    out = args.out / "isolation_forest" / f"{args.data.name}_{args.split}_{stamp}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(results, indent=2))
 

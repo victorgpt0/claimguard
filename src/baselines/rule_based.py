@@ -22,7 +22,7 @@ import pandas as pd
 
 from src.data.generator import load_catalogue
 from src.data.preprocessing import CAESAREAN_CODES, DELIVERY_CODES, repair_icd11_code
-from src.evaluation.predictions import write_predictions
+from src.evaluation.predictions import PREDICTIONS_DIR, write_predictions
 
 # (i) Upcoding: a claim billed above this multiple of the median amount the same provider
 # bills for the same ICD-11 code. KES 0 claims (capitation-paid outpatient visits) are
@@ -148,6 +148,7 @@ def main() -> None:
     parser.add_argument("--final", action="store_true",
                         help="score the held-out test split (final evaluation only)")
     parser.add_argument("--out", type=Path, default=OUT_DIR, help="per-rule counts directory")
+    parser.add_argument("--predictions-root", type=Path, default=PREDICTIONS_DIR)
     args = parser.parse_args()
     split = "test" if args.final else args.split
     if split == "test" and not args.final:
@@ -155,7 +156,8 @@ def main() -> None:
 
     claims = pd.read_parquet(args.data / f"{split}.parquet")
     results = apply_rules(claims)
-    path = write_predictions("rule_based", split, results[["claim_id", "flagged", "score"]])
+    path = write_predictions("rule_based", split, results[["claim_id", "flagged", "score"]],
+                             args.predictions_root)
 
     counts = {"dataset": args.data.name, "split": split, **rule_counts(results, claims)}
     args.out.mkdir(parents=True, exist_ok=True)
