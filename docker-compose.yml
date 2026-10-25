@@ -46,6 +46,12 @@ services:
       REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
+    volumes:
+      # config.yaml (gitignored). The pipeline files it points at (Google Drive) are not mounted:
+      # Docker cannot open the rclone FUSE mount unless rclone runs with --allow-other (which
+      # needs user_allow_other in /etc/fuse.conf). Without them the pages that read pipeline files
+      # say so; run the web process and workers from .venv for the full local setup (README).
+      - ./config:/app/config:ro
     depends_on:
       db:
         condition: service_healthy

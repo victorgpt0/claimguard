@@ -101,7 +101,10 @@ export DATABASE_URL=postgres://claimguard:claimguard-dev@localhost:5432/claimgua
 CLAIMGUARD_CONFIG=config/config.yaml .venv/bin/python web/manage.py runserver
 ```
 
-Or the whole stack in Docker: `docker compose up -d --build db redis web` (http://localhost:8000).
+Or the web service in Docker: `docker compose up -d --build db redis web` (http://localhost:8000).
+The container cannot see the rclone Drive mount (FUSE, see docker-compose.yml), so uploads,
+ICD-11 definitions and the monitoring pages need the `.venv` setup above, which reads Drive
+directly.
 Accounts imported from SQLite keep their passwords; a new database needs
 `web/manage.py createsuperuser` and then the Administrator's role set in the admin site.
 The Fraud Auditor sees Overview and Review queue; the Administrator sees Overview, Model
