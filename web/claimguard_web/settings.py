@@ -117,12 +117,13 @@ SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
 SOCIALACCOUNT_LOGIN_ON_GET = False
 ACCOUNT_EMAIL_VERIFICATION = "none"
-SOCIALACCOUNT_PROVIDERS = {"google": {
-    "SCOPE": ["openid", "email"],
-    "APP": {"client_id": os.environ.get("GOOGLE_CLIENT_ID", ""),
-            "secret": os.environ.get("GOOGLE_CLIENT_SECRET", "")},
-}}
-GOOGLE_SIGN_IN_ENABLED = bool(os.environ.get("GOOGLE_CLIENT_ID"))
+# Google is offered only when GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set (.env); without
+# them the sign-in page shows the password form alone.
+GOOGLE_SIGN_IN_ENABLED = bool(os.environ.get("GOOGLE_CLIENT_ID") and os.environ.get("GOOGLE_CLIENT_SECRET"))
+SOCIALACCOUNT_PROVIDERS = {"google": {"SCOPE": ["openid", "email"]}}
+if GOOGLE_SIGN_IN_ENABLED:
+    SOCIALACCOUNT_PROVIDERS["google"]["APP"] = {"client_id": os.environ["GOOGLE_CLIENT_ID"],
+                                                "secret": os.environ["GOOGLE_CLIENT_SECRET"]}
 
 # --- Static files, time --------------------------------------------------------------------------
 STATIC_URL = "static/"
