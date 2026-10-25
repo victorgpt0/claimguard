@@ -80,6 +80,39 @@ docker-compose.yml           # WHO ICD-11 API, self-hosted
    characters. `--auditor` also creates one Auditor account. Re-running leaves existing
    accounts unchanged, so it never resets a password.
 
+## Web application (Django, branch `django`)
+
+The dashboard is being rebuilt as a Django application in `web/` (`docs/platform_plan.md`):
+PostgreSQL with migrations, accounts with the two roles, Google sign-in for linked accounts,
+the review queue and report pages, and (phase 3) background jobs on a Colab GPU worker. The
+Streamlit dashboard in `dashboard/` stays until the Django screens fully replace it.
+
+Dependencies are locked in `uv.lock` (`pyproject.toml` groups: `web`, `ml`, `streamlit`,
+`dev`; torch comes from the CPU-only index locally):
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install uv
+.venv/bin/uv sync --frozen                     # everything; or: --no-default-groups --group web --group dev
+cp .env.example .env                           # optional; works without it on SQLite
+docker compose up -d db redis                  # PostgreSQL and Redis
+export DATABASE_URL=postgres://claimguard:claimguard-dev@localhost:5432/claimguard
+.venv/bin/python web/manage.py migrate
+.venv/bin/python web/manage.py import_sqlite ~/gdrive/claimguard/db/sha_fraud.sqlite   # once: accounts, reports, decisions
+CLAIMGUARD_CONFIG=config/config.yaml .venv/bin/python web/manage.py runserver
+```
+
+Or the whole stack in Docker: `docker compose up -d --build db redis web` (http://localhost:8000).
+Accounts imported from SQLite keep their passwords; a new database needs
+`web/manage.py createsuperuser` and then the Administrator's role set in the admin site.
+The Fraud Auditor sees Overview and Review queue; the Administrator sees Overview, Model
+performance, Feedback loop, and Users and Activity log (Django's admin site, where accounts
+are created, deactivated, never deleted, and Google emails linked). Google sign-in needs
+`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` in `.env`, with the redirect URI
+`http://localhost:8000/accounts/google/login/callback/`.
+
+Tests: `.venv/bin/python -m pytest` runs the ML and web suites together (SQLite by default;
+set `DATABASE_URL` to run the web tests on PostgreSQL).
+
 ## Dataset
 
 The synthetic claims dataset is built in three stages (Section 3.2.1); all three run from

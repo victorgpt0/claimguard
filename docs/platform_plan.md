@@ -57,3 +57,17 @@ About 9–10 days against 13 left before 7 Nov. If phase 0 slips, phase 4's file
 the activity-log screen are cut before anything in the evaluation.
 
 `docs/system_features_plan.md` (the Streamlit plan) is superseded from item C onward.
+
+## Progress
+
+- **25 Oct, branch `django` (worktree `../claimguard-django`), started during phase 0 at the
+  student's request while the Colab baselines run:**
+  - Phase 1 (#62): Django 5.2 project in `web/`, `pyproject.toml` + `uv.lock`, models and
+    migrations, accounts and roles, admin as user management, activity log, Google sign-in
+    for linked accounts, `import_sqlite` (the real database imports completely: 2 accounts,
+    675 claims, 398 reports, decisions and activity), Dockerfile and compose.
+  - Phase 2 (#63): overview, review queue, six-panel report with decisions, model
+    performance, feedback loop. Tested on SQLite and PostgreSQL; every page rendered on the
+    imported real data. Found and fixed on the way: a row lock PostgreSQL rejects, and the
+    overview funnel taking the newest run log even when it is an evaluation run (the
+    Streamlit dashboard has the same flaw).
