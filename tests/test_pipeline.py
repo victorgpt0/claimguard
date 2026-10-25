@@ -169,3 +169,17 @@ def test_evaluate_run_reports_stage1_recall(stage1, data, tmp_path):
     assert result["fraud_claims"] == int(batch["is_fraud"].sum())
     assert 0.0 <= result["stage1_recall"] <= 1.0
     assert result["end_to_end_recall"] <= result["stage1_recall"]
+
+
+@pytest.mark.parametrize("argv, message", [
+    (["--batch", "test", "--db", "x/evaluation.sqlite"], "pass --final"),
+    (["--batch", "validation", "--db", "x/sha_fraud.sqlite"], "review database"),
+    (["--batch", "test", "--final", "--db", "x/sha_fraud.sqlite"], "review database"),
+])
+def test_held_out_claims_never_reach_the_review_database(argv, message, monkeypatch, capsys, tmp_path):
+    """DR-08: the test split needs --final, and only the pool may write to sha_fraud.sqlite."""
+    from src import pipeline
+    monkeypatch.setattr("sys.argv", ["pipeline", "--data", str(tmp_path), "--cache", "c.json", *argv])
+    with pytest.raises(SystemExit):
+        pipeline.main()
+    assert message in capsys.readouterr().err

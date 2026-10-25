@@ -268,6 +268,7 @@ def main() -> None:
     parser.add_argument("--data", type=Path, required=True, help="processed dataset directory")
     parser.add_argument("--batch", default="deployment_pool",
                         help="split to audit (default: the DR-08 Deployment/Demonstration Pool)")
+    parser.add_argument("--final", action="store_true", help="required to audit the test split")
     parser.add_argument("--limit", type=int, help="audit only the first N claims of the batch")
     parser.add_argument("--cache", type=Path, required=True, help="ICD-11 cache JSON")
     parser.add_argument("--classifier", type=Path, help="LoRA adapter directory from train.py")
@@ -298,6 +299,13 @@ def main() -> None:
     from dotenv import load_dotenv
     load_dotenv(REPO_ROOT / ".env")
 
+    if args.batch == "test" and not args.final:
+        parser.error("the test split is reserved for the final evaluation; pass --final to audit it")
+    if args.batch != "deployment_pool" and Path(args.db).name == "sha_fraud.sqlite":
+        # DR-08: only Deployment/Demonstration Pool claims may reach the review queue, or
+        # held-out claims could become feedback and retraining data.
+        parser.error(f"--db {args.db} is the review database; write the {args.batch} split to "
+                     "a separate evaluation database")
     if args.classifier is None and not args.allow_untrained:
         parser.error("--classifier is required (or --allow-untrained for a wiring check)")
     train = pd.read_parquet(args.data / "train.parquet")
