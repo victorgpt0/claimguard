@@ -97,6 +97,7 @@ Started early on 17 Oct. Status on 19 Oct below.
 - [ ] Deployment requirements identified; hosting option chosen from `docs/hosting_guide.md`.
 
 ### Sprint 7 (26 Oct – 1 Nov): Evaluation and hosting
+- [x] Validation comparison on v0.6 and choice of reported configurations (25 Oct, TC-036): configuration A (the pipeline as designed) and C (`hybrid_text_rules`: text lane OR any rule) are both reported on the test split. Phase 0 order in `docs/platform_plan.md`.
 - [ ] Held-out evaluation against all four baselines: McNemar's test, bootstrap confidence intervals, mean and standard deviation over 5 seeds.
 - [ ] Stratified results: clean versus noisy text, common versus rare ICD-11 codes.
 - [ ] Cost summary table (fraud value flagged, auditor-hours).
