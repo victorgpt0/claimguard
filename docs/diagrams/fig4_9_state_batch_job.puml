@@ -1,0 +1,40 @@
+@startuml
+' State machine: a claims batch and its processing job (26 Oct 2026)
+skinparam shadowing false
+skinparam ArrowColor black
+skinparam stateBackgroundColor white
+skinparam stateBorderColor black
+
+state "Batch" as B {
+  state Uploaded
+  state Processing
+  state Processed
+  state "Failed" as BatchFailed
+  state Imported
+  [*] --> Uploaded : upload passes validation\n(rejected files are never stored)
+  [*] --> Imported : SQLite import of\nearlier reports
+  Uploaded --> Processing : auditor starts a job;\na worker takes it
+  Processing --> Processed : run succeeds\n(run log saved)
+  Processing --> BatchFailed : run raises an error\n(partial reports deleted)
+  BatchFailed --> Processing : auditor starts\na new job
+  Processed : summary and downloads available;
+  Processed : reports in the review queue
+  Imported : summary and downloads available
+}
+
+state "Job (one per processing attempt)" as J {
+  state Queued
+  state Running
+  state Succeeded
+  state "Failed" as JobFailed
+  [*] --> Queued : created with the batch locked;\nsent to the cpu or gpu queue
+  Queued : waits while no worker is online
+  Queued --> Running : a worker on that\nqueue takes it
+  Running --> Running : progress(stage,\ndone, total)
+  Running --> Succeeded
+  Running --> JobFailed
+  Succeeded --> [*]
+  JobFailed --> [*]
+}
+B -[hidden]-> J
+@enduml

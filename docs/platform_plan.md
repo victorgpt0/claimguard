@@ -80,3 +80,25 @@ the activity-log screen are cut before anything in the evaluation.
     dataset's test split only, because claim ids repeat across dataset versions. Open: the
     Colab worker needs hosted PostgreSQL and Redis (not yet chosen) and the branch pushed; it
     has not run yet.
+- **26 Oct:**
+  - Hosted services (#58): Neon PostgreSQL (project `hidden-term-38223696`, branch
+    `production`, AWS us-east-2) and Upstash Redis over TLS. `neon init`/`neon deploy` wrote
+    `neon.ts`, `package.json`, `.mcp.json` (Neon MCP server, OAuth) and the Neon agent
+    skills, and the two connection strings into `.env`. Settings: server-side cursors off on
+    the pooled endpoint, connection health checks (Neon scales to zero), certificate
+    verification for `rediss://`. Migrations run on the direct endpoint. Verified: the web
+    tests pass on Neon; a worker on Upstash processed an upload made through the web pages;
+    the SQLite import (rewritten with bulk inserts after the per-row version timed out
+    against Neon) loaded the same 2 accounts, 675 claims and 398 reports in 11 s. Google
+    sign-in confirmed live once the redirect URIs were registered.
+  - Phase 4 (#59): batch summary on the batch page (funnel, lanes, amount under audit, review
+    progress per reviewer, top providers and codes among queued claims, model version and
+    thresholds), Markdown and CSV downloads, both logged. Jobs now record their dataset and
+    thresholds in the run log. Report files (PDF) were not added: Markdown and CSV cover FR-16.
+  - Phase 5 (#60): `docs/diagrams/` (Figures 4.1, 4.3, 4.4, 4.7 sequence, 4.8 schema, 4.9
+    state machine), paste-ready Chapter 3 and 4 text in `compare/changes.txt` section D,
+    Chapter 5 draft updated, test plan TC-038 to TC-044, README, hosting guide.
+  - Open: the Colab GPU worker has not run (needs a GPU session and the branch pushed); the
+    supervisor's agreement to the change of stack; hosting the web process (#32, #39);
+    merging `django` into `dev` (expect a trivial conflict in `tests/test_plan.md`, where
+    `dev` added TC-037).

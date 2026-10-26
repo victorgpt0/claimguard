@@ -6,6 +6,38 @@ specifically: **Hugging Face Spaces' free tier does not support custom domains**
 needs a paid Pro plan), which is why Option B below routes through a Cloudflare Worker
 instead of pointing your domain at Spaces directly.
 
+## The Django platform (26 Oct): what is hosted and what is left
+
+Written for the Streamlit dashboard; the Django application (`docs/platform_plan.md`,
+branch `django`) changes the picture:
+
+- **Already hosted:** the database on Neon (PostgreSQL 18, AWS us-east-2, free tier) and the
+  job queue on Upstash (Redis over TLS). Both are reached by the web process, the local CPU
+  worker and the Colab GPU worker, which is why they had to be internet-reachable. Neon is
+  about 0.3 s per query away from Kenya, so a page making a dozen queries takes a few
+  seconds; a project in a nearer region would be faster.
+- **Still to host:** only the Django web process (`Dockerfile`, gunicorn, static files
+  served by WhiteNoise). Option A below works unchanged for it, pointing the tunnel at
+  `http://localhost:8000`; Django has no WebSocket requirement, so Option B's Streamlit
+  caveat no longer applies, but any always-on host must also reach Drive for the ICD-11
+  cache, the active classifier's metrics and the Feedback Dataset, which is the open
+  problem for every option other than the workstation.
+- **Settings for any public deployment:** `DJANGO_DEBUG=false`, a long random
+  `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS` and `DJANGO_CSRF_TRUSTED_ORIGINS` set to the
+  public domain (`https://...`), and the public callback
+  `https://<domain>/accounts/google/login/callback/` added to the Google OAuth client.
+  With DEBUG off the cookies are HTTPS-only and the app trusts the proxy's
+  `X-Forwarded-Proto` header.
+- **No default password:** the hosted database holds the accounts imported from SQLite
+  (their own passwords) or one created with `manage.py createsuperuser`. Nothing in the
+  repository creates an account with a known password; check the Users page before
+  announcing the address, and deactivate any test account.
+- **Chapter 5:** say "hosted database and queue; web application on the researcher's
+  machine behind a tunnel" (or wherever it actually runs), not "publicly available",
+  unless the web process really is always on.
+
+## The Streamlit-era options
+
 Pick based on what you actually need:
 
 | | Option A: Cloudflare Tunnel | Option B: HF Spaces + Cloudflare Worker |

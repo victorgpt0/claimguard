@@ -1,0 +1,134 @@
+@startuml
+' Figure 4.4: Class Diagram (Django platform, 26 Oct 2026)
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam ArrowColor black
+skinparam classBackgroundColor white
+skinparam classBorderColor black
+skinparam packageBorderColor #555555
+skinparam nodesep 25
+skinparam ranksep 40
+hide empty members
+
+package "Web application (web/)" {
+  class User {
+    username
+    email : Google account email
+    role : Auditor | Administrator
+    is_active : bool
+    password : salted hash
+    +is_auditor() : bool
+    +is_administrator() : bool
+  }
+  class ActivityLog {
+    action
+    detail
+    at
+    +{static} record(action, user, detail)
+  }
+  class Batch {
+    name
+    status
+    claims_count
+    source_csv
+    source_sha256
+    run_log
+  }
+  class Job {
+    queue : cpu | gpu
+    status
+    stage, done, total
+    worker
+    +percent() : int
+  }
+  class UploadValidator <<function validate>> {
+    +validate(frame, known_codes,\n existing_ids, heldout_ids) : Problem[]
+  }
+  class BatchSummary <<module summary>> {
+    +batch_summary(batch) : dict
+    +write_reports_csv(batch, out) : int
+  }
+  class ProcessBatchTask <<Celery task>> {
+    +process_batch(job_id)
+  }
+  class DjangoAuditRepository {
+    +save_claim(claim) : id
+    +save_verdict(...) : id
+    +save_report(...) : id
+  }
+}
+
+package "ML pipeline (src/)" {
+  class PipelineOrchestrator <<AuditPipeline>> {
+    +run(claims, settings, progress) : RunLog
+  }
+  class ClaimsPreprocessor {
+    +align_schema(claims)
+    +feature_matrix(claims)
+  }
+  abstract class BaseAnomalyDetector {
+    +fit(features)
+    +score(features)
+  }
+  class IsolationForestDetector
+  class AutoencoderDetector
+  class TextConsistencyScreen {
+    +flag(claims)
+  }
+  class SHAPExplainer {
+    +explain(features, top_k)
+  }
+  class ICD11APIClient {
+    +get_code_definition(code)
+  }
+  class ICD11Cache {
+    +get(code)
+  }
+  class SemanticConsistencyClassifier {
+    +predict(claim_id, notes, definition)
+  }
+  class AuditNarrativeGenerator {
+    +generate(notes, verdict, definition)
+  }
+  class AuditReportGenerator {
+    +assemble_and_save(...)
+  }
+  interface AuditReportRepository {
+    +save_claim(claim)
+    +save_verdict(...)
+    +save_report(...)
+  }
+  class FeedbackRepository {
+    +materialize_example(...)
+    +count_unconsumed_examples()
+  }
+  class ClassifierRetrainer {
+    +maybe_trigger_retraining(count)
+    +evaluate_and_promote(candidate, ...)
+  }
+}
+
+User "1" -- "*" ActivityLog : performs >
+User "1" -- "*" Batch : uploads >
+Batch "1" *-- "*" Job : processed by >
+UploadValidator ..> Batch : admits rows of >
+ProcessBatchTask ..> Job : updates progress >
+ProcessBatchTask ..> PipelineOrchestrator : runs >
+ProcessBatchTask ..> DjangoAuditRepository : creates >
+BatchSummary ..> Batch : summarises >
+DjangoAuditRepository ..|> AuditReportRepository
+
+PipelineOrchestrator ---> ClaimsPreprocessor
+PipelineOrchestrator --> BaseAnomalyDetector
+PipelineOrchestrator --> TextConsistencyScreen
+PipelineOrchestrator --> SHAPExplainer
+PipelineOrchestrator ---> SemanticConsistencyClassifier
+PipelineOrchestrator ---> "0..1" AuditNarrativeGenerator
+PipelineOrchestrator --> AuditReportGenerator
+PipelineOrchestrator ---> ICD11Cache
+BaseAnomalyDetector <|-- IsolationForestDetector
+BaseAnomalyDetector <|-- AutoencoderDetector
+ICD11Cache --> ICD11APIClient : fills from >
+AuditReportGenerator --> AuditReportRepository
+FeedbackRepository <.. ClassifierRetrainer : reads examples <
+@enduml

@@ -1,0 +1,67 @@
+@startuml
+' Figure 4.1: Use Case Diagram (Django platform, 26 Oct 2026)
+left to right direction
+skinparam shadowing false
+skinparam ArrowColor black
+skinparam usecaseBackgroundColor white
+skinparam usecaseBorderColor black
+skinparam actorBackgroundColor white
+skinparam actorBorderColor black
+skinparam rectangleBorderColor black
+skinparam nodesep 12
+skinparam ranksep 60
+
+actor "SHA Fraud\nAuditor" as Auditor
+actor "System\nAdministrator" as Admin
+
+rectangle "ClaimGuard post-payment audit system" {
+  usecase "Upload claims batch" as UC_Upload
+  usecase "Validate upload" as UC_Validate
+  usecase "Start batch processing" as UC_Process
+  usecase "Run audit pipeline" as UC_Pipeline
+  usecase "View pending audit reports" as UC_Queue
+  usecase "Review audit report\n(approve, reject, escalate)" as UC_Review
+  usecase "Capture feedback example" as UC_Feedback
+
+  usecase "Sign in\n(password or Google)" as UC_SignIn
+  usecase "Change own password" as UC_Pwd
+  usecase "View overview" as UC_Overview
+  usecase "View batch summary" as UC_Summary
+  usecase "Download summary\nand reports" as UC_Download
+
+  usecase "Monitor model performance" as UC_Model
+  usecase "View feedback loop and\nretraining history" as UC_Loop
+  usecase "Manage user accounts" as UC_Users
+  usecase "View activity log" as UC_Log
+}
+
+actor "Google\n(identity provider)" as Google
+actor "Processing worker\n(local CPU or Colab GPU)" as Worker
+
+Auditor -- UC_Upload
+Auditor -- UC_Process
+Auditor -- UC_Queue
+Auditor -- UC_Review
+Auditor -- UC_SignIn
+Auditor -- UC_Pwd
+Auditor -- UC_Overview
+Auditor -- UC_Summary
+
+Admin -- UC_SignIn
+Admin -- UC_Pwd
+Admin -- UC_Overview
+Admin -- UC_Summary
+Admin -- UC_Model
+Admin -- UC_Loop
+Admin -- UC_Users
+Admin -- UC_Log
+
+UC_Upload ..> UC_Validate : <<include>>
+UC_Process ..> UC_Pipeline : <<include>>
+UC_Queue <.. UC_Review : <<extend>>
+UC_Review ..> UC_Feedback : <<include>>
+UC_Summary <.. UC_Download : <<extend>>
+
+UC_SignIn -- Google
+UC_Pipeline -- Worker
+@enduml

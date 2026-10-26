@@ -38,9 +38,17 @@ src/
 ├── reporting/            # AuditReportGenerator, AuditReportRepository
 ├── feedback/              # FeedbackRepository (FR-12), ClassifierRetrainer (FR-13/FR-14)
 ├── auth/                  # User entity, authenticate() (NFR-03, PBKDF2-hashed passwords)
-└── db/                    # SQLite schema (Figure 4.7) + seed script
-dashboard/app.py            # Streamlit entrypoint (IR-03)
-docker-compose.yml           # WHO ICD-11 API, self-hosted
+└── db/                    # Streamlit-era SQLite schema + seed script (imported into Django)
+web/                         # Django application (IR-03, IR-04, IR-07, IR-08)
+├── claimguard_web/          # settings (env-driven), URLs, Celery app
+├── accounts/                # User with role, allauth adapters (Google, no sign-up), admin site
+├── activity/                # ActivityLog (FR-18)
+└── audit/                   # Batch, Claim, ClassifierVerdict, AuditReport, Job; pages; upload
+                             # validation (FR-15); process_batch task; batch summary (FR-16)
+dashboard/app.py             # Streamlit dashboard, kept until the django branch is merged
+notebooks/05_gpu_worker.ipynb  # Colab GPU worker for the "gpu" queue
+docker-compose.yml           # PostgreSQL, Redis, the web service, WHO ICD-11 API
+docs/diagrams/               # Chapter 4 diagrams for the Django platform (PlantUML + PNG)
 ```
 
 ## Setup
@@ -82,55 +90,86 @@ docker-compose.yml           # WHO ICD-11 API, self-hosted
 
 ## Web application (Django, branch `django`)
 
-The dashboard is being rebuilt as a Django application in `web/` (`docs/platform_plan.md`):
-PostgreSQL with migrations, accounts with the two roles, Google sign-in for linked accounts,
-the review queue and report pages, and (phase 3) background jobs on a Colab GPU worker. The
-Streamlit dashboard in `dashboard/` stays until the Django screens fully replace it.
+The Django application in `web/` replaces the Streamlit dashboard (`docs/platform_plan.md`):
+accounts with the two roles and Google sign-in for linked accounts, batch upload with full
+validation, processing as background jobs on a local CPU worker or a Colab GPU worker, the
+review queue and report pages, a summary report per batch, user management and an activity
+log. The Streamlit dashboard in `dashboard/` (see Running) is kept until the branch is merged.
 
 Dependencies are locked in `uv.lock` (`pyproject.toml` groups: `web`, `ml`, `streamlit`,
 `dev`; torch comes from the CPU-only index locally):
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install uv
-.venv/bin/uv sync --frozen                     # everything; or: --no-default-groups --group web --group dev
-cp .env.example .env                           # optional; works without it on SQLite
-docker compose up -d db redis                  # PostgreSQL and Redis
-export DATABASE_URL=postgres://claimguard:claimguard-dev@localhost:5432/claimguard
-.venv/bin/python web/manage.py migrate
-.venv/bin/python web/manage.py import_sqlite ~/gdrive/claimguard/db/sha_fraud.sqlite   # once: accounts, reports, decisions
-CLAIMGUARD_CONFIG=config/config.yaml .venv/bin/python web/manage.py runserver
+.venv/bin/uv sync --frozen        # everything; or: --no-default-groups --group web --group dev
+cp .env.example .env              # without DATABASE_URL it runs on SQLite (web/db.sqlite3)
+cp config/config.example.yaml config/config.yaml   # paths to the Drive folders; keep pipeline.dataset
 ```
 
-Or the web service in Docker: `docker compose up -d --build db redis web` (http://localhost:8000).
-The container cannot see the rclone Drive mount (FUSE, see docker-compose.yml), so uploads,
-ICD-11 definitions and the monitoring pages need the `.venv` setup above, which reads Drive
-directly.
-Accounts imported from SQLite keep their passwords; a new database needs
-`web/manage.py createsuperuser` and then the Administrator's role set in the admin site.
-The Fraud Auditor sees Overview and Review queue; the Administrator sees Overview, Model
-performance, Feedback loop, and Users and Activity log (Django's admin site, where accounts
-are created, deactivated, never deleted, and Google emails linked). Google sign-in needs
-`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` in `.env`, with the redirect URI
-`http://localhost:8000/accounts/google/login/callback/`.
+**Database and queue.** Set in `.env` (`.env.example` explains each variable):
 
-**Batches and jobs.** The Fraud Auditor uploads a claims CSV under Batches (a template is
-offered); every line is checked and nothing is stored unless all pass. Processing runs as a
-Celery job on one of two queues, with live progress on the batch page:
+| Setup | `DATABASE_URL` | `REDIS_URL` |
+|---|---|---|
+| Quick local run | unset (SQLite) | `redis://localhost:6379/0` (`docker compose up -d redis`) |
+| Local PostgreSQL | `postgres://claimguard:claimguard-dev@localhost:5432/claimguard` (`docker compose up -d db redis`) | as above |
+| Hosted, needed for the Colab GPU worker | Neon: `neon deploy` writes `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` into `.env` | Upstash: `rediss://default:<password>@<db>.upstash.io:6379` |
+
+The settings verify Upstash's TLS certificate and turn off server-side cursors on Neon's
+pooled endpoint. Run migrations and the one-off import on Neon's direct endpoint:
 
 ```bash
-# Local CPU worker (stage 1, SHAP, classifier; no narratives). Same environment variables as the
-# web process; config.yaml needs `pipeline: {dataset: v0.6-20k}` (see config.example.yaml).
-cd web && ../.venv/bin/celery -A claimguard_web worker -Q cpu -c 1 -n cpu@%h
+cd web
+export $(grep '^DATABASE_URL_UNPOOLED=' ../.env | tr -d '"')     # .env is not a shell file
+DATABASE_URL=$DATABASE_URL_UNPOOLED ../.venv/bin/python manage.py migrate
+DATABASE_URL=$DATABASE_URL_UNPOOLED ../.venv/bin/python manage.py import_sqlite ~/gdrive/claimguard/db/sha_fraud.sqlite   # once
+../.venv/bin/python manage.py runserver                       # http://localhost:8000
 ```
 
-The GPU queue (with narratives) is served by `notebooks/05_gpu_worker.ipynb` on Colab. Colab
-cannot reach this machine, so that needs a PostgreSQL and a Redis reachable from the internet
-(e.g. hosted free tiers), set as `DATABASE_URL`/`REDIS_URL` both here and in the notebook's
-Colab Secrets, and the `django` branch pushed. An uploaded CSV is kept in the database, so any
-worker can process it.
+Imported accounts keep their passwords. A new database without an import needs
+`manage.py createsuperuser`, then the Administrator role set in the admin site.
+`docker compose up -d --build db redis web` runs the web service in a container against the
+local PostgreSQL and Redis; the container cannot see the rclone Drive mount (FUSE, see
+docker-compose.yml), so uploads, ICD-11 definitions and the monitoring pages need the
+`.venv` setup, which reads Drive directly.
+
+**Roles.** The Fraud Auditor sees Overview, Review queue and Batches (upload, processing,
+summaries). The Administrator sees Overview, Batches (summaries only), Model performance,
+Feedback loop, and Users and Activity log in Django's admin site, where accounts are
+created, deactivated (never deleted), given a role and linked to a Google email, and the
+log is filtered and exported. Everyone changes their own password from their name in the
+top bar. A session idle for 30 minutes (`SESSION_TIMEOUT_MINUTES`) is signed out.
+
+**Google sign-in** needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env` and, on the
+OAuth client in Google Cloud Console, every address the app is opened at as an authorised
+redirect URI, e.g. `http://localhost:8000/accounts/google/login/callback/` and the same with
+`127.0.0.1` (Google treats them as different; a missing one gives `redirect_uri_mismatch`).
+Only accounts whose email the Administrator has linked can sign in with Google.
+
+**Batches and jobs.** The Fraud Auditor uploads a claims CSV under Batches (a template is
+offered, at most 2,000 claims and 10 MB); every line is checked and nothing is stored unless
+all pass, and held-out test claims are always refused (DR-08). Processing runs as a Celery
+job on one of two queues, with live progress on the batch page:
+
+```bash
+# Local CPU worker (stage 1, SHAP, classifier; no narratives), with the same .env as the web
+# process. config.yaml needs pipeline.dataset (see config.example.yaml).
+.venv/bin/celery --workdir web -A claimguard_web worker -Q cpu -c 1 -n cpu@%h --without-gossip --without-mingle -l INFO
+```
+
+The GPU queue (with narratives) is served by `notebooks/05_gpu_worker.ipynb` on Colab, with
+the pooled `DATABASE_URL` and the `REDIS_URL` in the notebook's Colab Secrets and this branch
+pushed. The uploaded CSV is kept in the database, so either worker can process it. With
+Upstash's free tier, stop idle workers: an idle worker still polls Redis. A failed job
+leaves no partial reports, and the batch can be started again.
+
+**Outputs.** A processed (or imported) batch shows its summary: claims flagged by each
+detector, cleared and queued per lane, narratives, amount under audit, review progress per
+reviewer, top providers and ICD-11 codes among queued claims, and the classifier version and
+thresholds. It downloads as Markdown, and the batch's reports as CSV (`web/audit/summary.py`).
 
 Tests: `.venv/bin/python -m pytest` runs the ML and web suites together (SQLite by default;
-set `DATABASE_URL` to run the web tests on PostgreSQL).
+set `DATABASE_URL` to run the web tests on PostgreSQL). Design diagrams for Chapter 4 are in
+`docs/diagrams/`.
 
 ## Dataset
 
@@ -242,6 +281,10 @@ data-flow diagram, and the remaining Sprint-by-Sprint checklist. Read this befor
 starting Sprint 1.
 
 ## Deployment
+
+The Django application uses hosted Neon PostgreSQL and Upstash Redis (see Web application);
+only the web process itself still needs a host (#32, #39). The older notes below were
+written for the Streamlit dashboard.
 
 Free hosting on your own domain: see `docs/hosting_guide.md` for two options (Cloudflare
 Tunnel for a self-hosted demo, or Hugging Face Spaces + a Cloudflare Worker reverse proxy
