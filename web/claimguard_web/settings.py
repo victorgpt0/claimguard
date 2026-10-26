@@ -75,8 +75,14 @@ TEMPLATES = [{
 }]
 
 # PostgreSQL in Docker and in deployment (DATABASE_URL); SQLite for a quick local run and tests.
+# Health checks reopen a connection that a hosted database (Neon scales to zero) has closed.
 DATABASES = {"default": dj_database_url.config(
-    default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}", conn_max_age=60)}
+    default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}", conn_max_age=60, conn_health_checks=True)}
+# Neon's pooled endpoint (host "-pooler") is PgBouncer in transaction mode, which cannot keep
+# a server-side cursor open across transactions. Run migrations on the direct endpoint:
+#   DATABASE_URL=$DATABASE_URL_UNPOOLED python manage.py migrate
+if "-pooler." in DATABASES["default"].get("HOST", ""):
+    DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Accounts (NFR-03) ------------------------------------------------------------------------
@@ -151,6 +157,11 @@ CELERY_TASK_DEFAULT_QUEUE = "cpu"
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_TASK_ACKS_LATE = True
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+# A hosted Redis (Upstash) is reached over TLS, rediss://, and Celery needs to be told to
+# verify its certificate.
+if CELERY_BROKER_URL.startswith("rediss://"):
+    import ssl
+    CELERY_BROKER_USE_SSL = {"ssl_cert_reqs": ssl.CERT_REQUIRED}
 
 # The ML pipeline's paths and thresholds (FR-10): the same config.yaml the scripts read.
 CLAIMGUARD_CONFIG = Path(os.environ.get("CLAIMGUARD_CONFIG", REPO_ROOT / "config" / "config.yaml"))
