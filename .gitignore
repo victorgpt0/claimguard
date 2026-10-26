@@ -43,3 +43,5 @@ dist/
 web/db.sqlite3
 web/staticfiles/
 media/
+.neon
+node_modules/
