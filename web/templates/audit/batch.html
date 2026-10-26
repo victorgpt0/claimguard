@@ -27,10 +27,61 @@
   <p><button>Start processing</button></p>
 </form>
 {% endif %}
-{% if batch.run_log %}<section class="card"><h2>Run summary</h2>
-  {% with s=batch.run_log.summary %}<p>{{ s.claims }} claims screened, {{ s.flagged_stage1 }} flagged at stage 1
-  (Isolation Forest {{ s.flagged_by.isolation_forest }}, autoencoder {{ s.flagged_by.autoencoder }}, text screen {{ s.flagged_by.text_screen }});
-  queued for review: {{ s.reported.text_inconsistent }} text inconsistent, {{ s.reported.structural_anomaly }} structural anomaly;
-  {{ s.narratives }} narratives{% if s.narrative_failures %}, {{ s.narrative_failures }} failed{% endif %}.</p>{% endwith %}
-</section>{% endif %}
+{% if s %}
+<section class="card">
+  <h2>Batch summary</h2>
+  <p><a class="button" href="{% url 'audit:batch_summary' batch.pk %}">Download summary (Markdown)</a>
+     <a class="button" href="{% url 'audit:batch_reports' batch.pk %}">Download reports (CSV)</a></p>
+  <div class="tiles">
+    <div class="tile"><span class="label">Flagged at stage 1</span><span class="value">{{ s.flagged }}</span><span class="note">of {{ s.claims }} claims</span></div>
+    <div class="tile"><span class="label">Queued for review</span><span class="value">{{ s.queued }}</span><span class="note">{{ s.cleared }} cleared by the classifier</span></div>
+    <div class="tile"><span class="label">Amount under audit</span><span class="value small">{{ amount_under_audit }}</span><span class="note">of {{ amount_claimed }} claimed</span></div>
+    <div class="tile"><span class="label">Reviewed</span><span class="value">{{ s.reviewed }}</span><span class="note">{{ s.review.pending }} pending</span></div>
+  </div>
+  <div class="grid2">
+    <div>
+      <div data-chart="chart-funnel"></div>
+      <table class="list">
+        <tbody>
+          {% if s.flagged_by %}<tr><td>Flagged by Isolation Forest / autoencoder / text screen</td><td class="num">{{ s.flagged_by.isolation_forest }} / {{ s.flagged_by.autoencoder }} / {{ s.flagged_by.text_screen }}</td></tr>{% endif %}
+          <tr><td><span class="badge text_inconsistent">Text inconsistent</span></td><td class="num">{{ s.lanes.text_inconsistent }}</td></tr>
+          <tr><td><span class="badge structural_anomaly">Structural anomaly</span></td><td class="num">{{ s.lanes.structural_anomaly }}</td></tr>
+          <tr><td>Narratives generated{% if s.narrative_failures %} ({{ s.narrative_failures }} failed){% endif %}</td><td class="num">{{ s.narratives }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h2>Review progress</h2>
+      <table class="list">
+        <thead><tr><th>Reviewer</th><th class="num">Approved</th><th class="num">Rejected</th><th class="num">Escalated</th></tr></thead>
+        <tbody>
+          {% for name, d in s.reviewers.items %}<tr><td>{{ name }}</td><td class="num">{{ d.approved }}</td><td class="num">{{ d.rejected }}</td><td class="num">{{ d.escalated }}</td></tr>{% endfor %}
+          <tr><td><strong>All</strong> ({{ s.review.pending }} pending)</td><td class="num">{{ s.review.approved }}</td><td class="num">{{ s.review.rejected }}</td><td class="num">{{ s.review.escalated }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+<div class="grid2">
+  <section class="card"><h2>Queued claims by provider</h2>
+    {% if s.top_providers %}<table class="list"><thead><tr><th>Provider</th><th class="num">Claims</th><th class="num">KES</th></tr></thead>
+    <tbody>{% for p in s.top_providers %}<tr><td>{{ p.claim__provider_id }}</td><td class="num">{{ p.claims }}</td><td class="num">{{ p.amount|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table>
+    {% else %}<p class="empty">None queued.</p>{% endif %}</section>
+  <section class="card"><h2>Queued claims by ICD-11 code</h2>
+    {% if s.top_codes %}<table class="list"><thead><tr><th>Code</th><th class="num">Claims</th><th class="num">KES</th></tr></thead>
+    <tbody>{% for c in s.top_codes %}<tr><td>{{ c.claim__icd11_code }}</td><td class="num">{{ c.claims }}</td><td class="num">{{ c.amount|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table>
+    {% else %}<p class="empty">None queued.</p>{% endif %}</section>
+</div>
+<section class="card"><h2>Models and settings</h2>
+  <dl class="fields">
+    <div><dt>Classifier version</dt><dd>{{ s.model_versions|join:", "|default:"—" }}</dd></div>
+    {% if s.settings.queue %}<div><dt>Worker queue</dt><dd>{{ s.settings.queue }}</dd></div>{% endif %}
+    {% if s.settings.dataset %}<div><dt>Stage 1 fitted on</dt><dd>{{ s.settings.dataset }}</dd></div>{% endif %}
+    {% for name, value in s.settings.thresholds.items %}<div><dt>{{ name }}</dt><dd>{{ value }}</dd></div>{% endfor %}
+  </dl>
+  {% if not s.settings %}<p class="caption">No run log: {% if batch.status == "imported" %}these reports were imported from the earlier SQLite database, which kept only flagged claims, so every claim here counts as flagged{% else %}none was recorded{% endif %}.</p>{% endif %}
+</section>
+{% endif %}
 {% endblock %}
+{% block charts %}{% if chart_specs %}{% for name, spec in chart_specs.items %}{{ spec|json_script:name }}{% endfor %}
+{% include "partials_charts.html" %}{% endif %}{% endblock %}

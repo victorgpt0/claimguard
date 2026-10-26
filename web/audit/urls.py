@@ -15,5 +15,7 @@ urlpatterns = [
     path("batches/template.csv", batch_views.upload_template, name="upload_template"),
     path("batches/<int:pk>/", batch_views.batch_detail, name="batch"),
     path("batches/<int:pk>/process/", batch_views.start_job, name="start_job"),
+    path("batches/<int:pk>/summary.md", batch_views.batch_summary_markdown, name="batch_summary"),
+    path("batches/<int:pk>/reports.csv", batch_views.batch_reports_csv, name="batch_reports"),
     path("jobs/<int:pk>/progress/", batch_views.job_progress, name="job_progress"),
 ]

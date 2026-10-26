@@ -22,6 +22,9 @@ from .repository import DjangoAuditRepository
 
 logger = logging.getLogger(__name__)
 _STAGE1 = {}   # fitted once per worker process and configuration: fitting takes minutes
+# The thresholds a run's results depend on, kept in its run log for the batch summary (FR-16).
+RECORDED_THRESHOLDS = ("isolation_forest_contamination", "autoencoder_train_quantile", "text_screen_threshold",
+                       "classifier_decision_threshold")
 
 
 def _update(job_id: int, **fields) -> None:
@@ -80,8 +83,10 @@ def process_batch(self, job_id: int) -> str:
         config = services.config()
         claims = pd.read_csv(io.StringIO(batch.source_csv), dtype={"claim_id": str, "provider_id": str, "member_id": str})
         pipeline = build_pipeline(config, job.queue == Job.Queue.GPU, DjangoAuditRepository(batch), progress)
-        log = pipeline.run(claims, {"batch": f"upload:{batch.pk}", "job": job_id, "queue": job.queue},
-                           progress=progress)
+        thresholds = {k: v for k, v in (config.get("thresholds") or {}).items() if k in RECORDED_THRESHOLDS}
+        log = pipeline.run(claims, {"batch": f"upload:{batch.pk}", "job": job_id, "queue": job.queue,
+                                    "dataset": (config.get("pipeline") or {}).get("dataset"),
+                                    "thresholds": thresholds}, progress=progress)
     except Exception as exc:
         logger.exception("Job %s failed", job_id)
         AuditReport.objects.filter(claim__batch=batch).delete()

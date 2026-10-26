@@ -12,13 +12,16 @@ from django.contrib import messages
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
+from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from accounts.roles import any_role_required, auditor_required
 from activity.models import ActivityLog
 
-from . import services
+from . import charts, services
 from .models import Batch, Claim, Job
+from .summary import TOP, batch_summary, funnel_counts, write_reports_csv
 from .tasks import process_batch
 from .validation import UPLOAD_COLUMNS, validate
 
@@ -113,10 +116,60 @@ def batch_detail(request, pk: int):
     batch = get_object_or_404(Batch.objects.select_related("uploaded_by"), pk=pk)
     job = batch.jobs.first()
     reports = batch.claims.filter(reports__isnull=False).count()
-    return render(request, "audit/batch.html", {
-        "batch": batch, "job": job, "reports": reports, "queues": Job.Queue.choices,
-        "can_start": request.user.is_auditor and batch.status in (Batch.Status.UPLOADED, Batch.Status.FAILED)
-        and not (job and job.active), "workers": services.workers_online()})
+    context = {"batch": batch, "job": job, "reports": reports, "queues": Job.Queue.choices,
+               "can_start": request.user.is_auditor and batch.status in (Batch.Status.UPLOADED, Batch.Status.FAILED)
+               and not (job and job.active), "workers": services.workers_online()}
+    if _summarised(batch):
+        summary = batch_summary(batch)
+        context.update(s=summary, top=TOP, amount_claimed=_kes(summary["amount_claimed"]),
+                       amount_under_audit=_kes(summary["amount_under_audit"]),
+                       chart_specs={"chart-funnel": charts.funnel(funnel_counts(summary))})
+    return render(request, "audit/batch.html", context)
+
+
+def _summarised(batch: Batch) -> bool:
+    return batch.status in (Batch.Status.PROCESSED, Batch.Status.IMPORTED)
+
+
+def _kes(amount) -> str:
+    return f"KES {float(amount or 0):,.0f}"
+
+
+def _filename(batch: Batch, suffix: str) -> str:
+    return f"batch_{batch.pk}_{timezone.localtime():%Y%m%d}_{suffix}"
+
+
+@require_GET
+@any_role_required
+def batch_summary_markdown(request, pk: int):
+    """FR-16: the summary as a readable Markdown report."""
+    batch = get_object_or_404(Batch.objects.select_related("uploaded_by"), pk=pk)
+    if not _summarised(batch):
+        messages.warning(request, "A summary exists once the batch is processed.")
+        return redirect("audit:batch", pk=pk)
+    summary = batch_summary(batch)
+    text = render_to_string("audit/batch_summary.md", {
+        "batch": batch, "s": summary, "top": TOP, "user": request.user, "generated": timezone.localtime(),
+        "amount_claimed": _kes(summary["amount_claimed"]), "amount_under_audit": _kes(summary["amount_under_audit"])})
+    response = HttpResponse(text, content_type="text/markdown; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="{_filename(batch, "summary.md")}"'
+    ActivityLog.record(ActivityLog.Action.DOWNLOAD, request.user, f"batch #{pk}: summary (Markdown)")
+    return response
+
+
+@require_GET
+@any_role_required
+def batch_reports_csv(request, pk: int):
+    """FR-16: the batch's audit reports, one row each, with verdict, SHAP top 3 and decision."""
+    batch = get_object_or_404(Batch, pk=pk)
+    if not _summarised(batch):
+        messages.warning(request, "Reports exist once the batch is processed.")
+        return redirect("audit:batch", pk=pk)
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="{_filename(batch, "reports.csv")}"'
+    n = write_reports_csv(batch, response)
+    ActivityLog.record(ActivityLog.Action.DOWNLOAD, request.user, f"batch #{pk}: {n} reports (CSV)")
+    return response
 
 
 @auditor_required
