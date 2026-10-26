@@ -99,6 +99,21 @@ def seed_of(run_dir: Path) -> int:
     return int(match.group(1))
 
 
+def finished_runs(runs: Path) -> list[Path]:
+    """Run folders train.py completed: it writes metrics.json last, so a folder without
+    one is a stopped run and is skipped (a second folder for the same seed would otherwise
+    overwrite that seed's predictions)."""
+    folders = sorted(p for p in runs.iterdir() if p.is_dir() and RUN_SEED.search(p.name))
+    for folder in folders:
+        if not (folder / "metrics.json").exists():
+            print(f"skipped {folder.name}: no metrics.json (stopped run)")
+    finished = [f for f in folders if (f / "metrics.json").exists()]
+    seeds = [seed_of(f) for f in finished]
+    if len(seeds) != len(set(seeds)):
+        raise ValueError(f"more than one finished run for the same seed in {runs}")
+    return finished
+
+
 def predictions_frame(examples: list[dict], probabilities: list[float]) -> pd.DataFrame:
     return pd.DataFrame({"claim_id": [e["claim_id"] for e in examples],
                          "flagged": [int(p > 0.5) for p in probabilities],
@@ -114,7 +129,7 @@ def predict(runs: Path, data: Path, split: str, base_model: str, root: Path) -> 
     examples = [json.loads(line) for line in open(data / f"{split}.jsonl", encoding="utf-8")]
     device = default_device()
     paths = []
-    for run_dir in sorted(p for p in runs.iterdir() if p.is_dir() and RUN_SEED.search(p.name)):
+    for run_dir in finished_runs(runs):
         classifier = SemanticConsistencyClassifier(str(run_dir), base_model, device)
         if classifier.model_version == "untrained-base":
             raise FileNotFoundError(f"no checkpoint in {run_dir}")
@@ -122,7 +137,7 @@ def predict(runs: Path, data: Path, split: str, base_model: str, root: Path) -> 
         system = f"{SYSTEM}_seed{seed_of(run_dir)}"
         paths.append(write_predictions(system, split, predictions_frame(examples, probabilities), root))
     if not paths:
-        raise FileNotFoundError(f"no <timestamp>_seed<N> run folders in {runs}")
+        raise FileNotFoundError(f"no finished <timestamp>_seed<N> run folders in {runs}")
     return paths
 
 

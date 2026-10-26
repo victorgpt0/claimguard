@@ -58,3 +58,17 @@ def test_seed_from_run_folder(tmp_path):
     assert seed_of(tmp_path / "20261018T161108_seed42") == 42
     with pytest.raises(ValueError):
         seed_of(tmp_path / "active")
+
+
+def test_stopped_runs_are_skipped(tmp_path):
+    from src.baselines.structured_only import finished_runs
+    for name, done in [("20261025T180826_seed42", False), ("20261025T181610_seed42", True),
+                       ("20261025T183804_seed123", True)]:
+        (tmp_path / name).mkdir()
+        if done:
+            (tmp_path / name / "metrics.json").write_text("{}")
+    assert [p.name for p in finished_runs(tmp_path)] == ["20261025T181610_seed42", "20261025T183804_seed123"]
+    (tmp_path / "20261026T000000_seed42").mkdir()
+    (tmp_path / "20261026T000000_seed42" / "metrics.json").write_text("{}")
+    with pytest.raises(ValueError, match="same seed"):
+        finished_runs(tmp_path)

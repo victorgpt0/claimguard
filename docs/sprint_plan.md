@@ -98,7 +98,8 @@ Started early on 17 Oct. Status on 19 Oct below.
 
 ### Sprint 7 (26 Oct – 1 Nov): Evaluation and hosting
 - [x] Validation comparison on v0.6 and choice of reported configurations (25 Oct, TC-036): configuration A (the pipeline as designed) and C (`hybrid_text_rules`: text lane OR any rule) are both reported on the test split. Phase 0 order in `docs/platform_plan.md`.
-- [ ] Held-out evaluation against all four baselines: McNemar's test, bootstrap confidence intervals, mean and standard deviation over 5 seeds.
+- [x] GPU baselines and the retraining run on validation (25 Oct, Colab session A; TC-013, TC-014, TC-037): structured-only F1 0.585 ± 0.023 over 3 seeds; zero-shot LLM F1 0.594 against the classifier's 0.952 on the text label (first 1,000 claims); the retrained candidate was refused by the FR-14 gate.
+- [ ] Held-out evaluation against all four baselines: McNemar's test, bootstrap confidence intervals, mean and standard deviation over the structured-only seeds (3, for GPU time).
 - [ ] Stratified results: clean versus noisy text, common versus rare ICD-11 codes.
 - [ ] Cost summary table (fraud value flagged, auditor-hours).
 - [ ] Automated faithfulness check script: a narrative passes only if it names the billed code's official ICD-11 title and refers to specific content from the claim's clinical notes. Run on every report.

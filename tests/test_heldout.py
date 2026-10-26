@@ -168,3 +168,21 @@ def test_malformed_codes_are_not_counted_as_rare_codes():
     from src.evaluation.strata import rare_codes
     train = ["JB20"] * 50 + ["jb20"] * 30 + ["JB20 "] * 20 + ["CA40"] * 100
     assert rare_codes(train) == set()
+
+
+def test_claims_from_scores_every_system_on_the_covered_claims(tmp_path, monkeypatch):
+    data, root = _dataset(tmp_path)
+    write_predictions("partial", "validation", pd.DataFrame(
+        {"claim_id": ["C0", "C1", "C4"], "flagged": [1, 0, 1]}), root)
+    claims = heldout.restrict_to(heldout.load_split(data, "validation"), "partial", "validation", root)
+    assert claims["claim_id"].tolist() == ["C0", "C1", "C4"]
+    out = tmp_path / "eval"
+    monkeypatch.setattr(sys, "argv", ["heldout", "--data", str(data), "--systems", "pipeline", "partial",
+                                      "--claims-from", "partial", "--predictions-root", str(root),
+                                      "--resamples", "20", "--out", str(out)])
+    heldout.main()
+    run = next(out.iterdir())
+    result = json.loads((run / "results.json").read_text())
+    assert result["claims"] == 3 and result["claims_from"] == "partial"
+    assert result["systems"]["pipeline"]["metrics"]["claims"] == 3
+    assert "Only the claims partial was run on" in (run / "tables.md").read_text()

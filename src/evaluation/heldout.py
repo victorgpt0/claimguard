@@ -14,6 +14,10 @@ grouped automatically for the mean ± std table.
 The test split is reserved for the final evaluation: reading it needs `--final`, as in
 src/classification/evaluate.py.
 
+A system run on part of a split only (the zero-shot LLM with --limit) is compared with
+`--claims-from <system>`: every system is then scored on the claims that system covers,
+so the comparison stays paired, and the tables say so.
+
     python -m src.evaluation.heldout --data data/processed/v0.6-20k --split test --final \\
         --systems pipeline pipeline_text_lane rule_based structured_only_seed42 ... \\
         --reference pipeline --truth is_fraud
@@ -149,6 +153,13 @@ def load_split(data: Path, split: str) -> pd.DataFrame:
     return claims
 
 
+def restrict_to(claims: pd.DataFrame, system: str, split: str,
+                root: Path = PREDICTIONS_DIR) -> pd.DataFrame:
+    """The split's claims that `system` has predictions for, in split order."""
+    covered = set(read_predictions(system, split, root)["claim_id"])
+    return claims[claims["claim_id"].isin(covered)].reset_index(drop=True)
+
+
 def join_predictions(claims: pd.DataFrame, system: str, split: str,
                      root: Path = PREDICTIONS_DIR) -> pd.DataFrame:
     """The split's claims, in split order, with the system's flagged and score. Every
@@ -230,8 +241,11 @@ def tables_markdown(result: dict) -> str:
     out = [f"# Held-out evaluation: {result['split']} split", "",
            f"{result['claims']} claims, {result['positives']} positive (truth: {truth_name}). "
            f"95% percentile bootstrap intervals, {result['bootstrap']['resamples']} resamples "
-           "shared by all systems.", "",
-           "## Main metrics", ""]
+           "shared by all systems.", ""]
+    if result.get("claims_from"):
+        out += [f"Only the claims {result['claims_from']} was run on; every system is scored on "
+                "those claims.", ""]
+    out += ["## Main metrics", ""]
     out += _table(["System", "Precision", "Recall", "F1", "FPR", "AUC-ROC"],
                   [[name] + [_with_ci(s["metrics"], s["ci95"], m) for m in METRICS]
                    for name, s in systems.items()])
@@ -286,6 +300,7 @@ def main() -> None:
     parser.add_argument("--reference", default="pipeline", help="system compared with every other (McNemar)")
     parser.add_argument("--truth", choices=["is_fraud", "text"], default="is_fraud")
     parser.add_argument("--predictions-root", type=Path, default=PREDICTIONS_DIR)
+    parser.add_argument("--claims-from", help="score every system on this system's claims only")
     parser.add_argument("--seed-groups", nargs="*", help="base=sys1,sys2 ...; default: auto-group <base>_seed<N>")
     parser.add_argument("--minutes", type=float, nargs="+", default=list(DEFAULT_MINUTES))
     parser.add_argument("--resamples", type=int, default=1000)
@@ -295,6 +310,8 @@ def main() -> None:
     guard_split(parser, args.split, args.final)
 
     claims = load_split(args.data, args.split)
+    if args.claims_from:
+        claims = restrict_to(claims, args.claims_from, args.split, args.predictions_root)
     train_codes = pd.read_parquet(args.data / "train.parquet", columns=["icd11_code"])["icd11_code"].tolist()
     reference = args.reference if args.reference in args.systems else None
     if args.reference and reference is None:
@@ -302,6 +319,7 @@ def main() -> None:
     result = evaluate(claims, train_codes, args.systems, args.split, reference, args.truth,
                       args.predictions_root, args.resamples, args.seed, args.minutes, args.seed_groups)
     result["data"] = str(args.data)
+    result["claims_from"] = args.claims_from
 
     run_id = f"{args.data.name}_{args.split}_{args.truth}_{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}"
     out = args.out / run_id
