@@ -96,3 +96,50 @@ def test_google_sign_in_only_for_a_linked_user(rf, make_user, settings):
     entry = ActivityLog.objects.get()
     assert (entry.action, entry.detail, entry.user) == ("google_sign_in_refused", "stranger@gmail.com", None)
     assert settings.SOCIALACCOUNT_EMAIL_AUTHENTICATION and settings.SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT
+
+
+def test_an_idle_session_expires_after_30_minutes(make_user):
+    make_user()
+    client = Client()
+    client.post(reverse("account_login"), {"login": "auditor", "password": "auditor-pass-1"})
+    assert client.session.get_expiry_age() == 30 * 60
+    session = client.session
+    session.set_expiry(-1)   # as if 30 idle minutes had passed
+    session.save()
+    response = client.get(reverse("audit:overview"))
+    assert response.status_code == 302 and reverse("account_login") in response["Location"]
+
+
+def test_administrator_account_changes_are_logged(make_user):
+    admin = make_user("admin", role="Administrator", password="admin-pass-12")
+    client = Client()
+    client.force_login(admin)
+    client.post(reverse("admin:accounts_user_add"), {
+        "username": "newauditor", "role": "Auditor", "email": "New@Example.com",
+        "password1": "a-long-pass-phrase-1", "password2": "a-long-pass-phrase-1"})
+    user = User.objects.get(username="newauditor")
+    assert user.email == "new@example.com" and user.check_password("a-long-pass-phrase-1")
+    client.post(reverse("admin:accounts_user_change", args=[user.pk]), {
+        "username": "newauditor", "role": "Auditor", "email": "new@example.com", "is_active": ""})
+    user.refresh_from_db()
+    assert not user.is_active
+    actions = list(ActivityLog.objects.exclude(action="sign_in").values_list("action", "detail"))
+    assert ("user_created", "newauditor (Auditor)") in actions and ("user_deactivated", "newauditor") in actions
+
+
+def test_activity_log_is_read_only_and_exportable(make_user):
+    admin = make_user("admin", role="Administrator", password="admin-pass-12")
+    ActivityLog.record(ActivityLog.Action.DECISION, admin, "report #1: approved")
+    entry = ActivityLog.objects.get()
+    client = Client()
+    client.force_login(admin)
+    assert client.get(reverse("admin:activity_activitylog_add")).status_code == 403
+    assert client.get(reverse("admin:activity_activitylog_delete", args=[entry.pk])).status_code == 403
+    assert client.post(reverse("admin:activity_activitylog_change", args=[entry.pk]),
+                       {"action": "sign_in", "detail": "edited"}).status_code == 403
+    entry.refresh_from_db()
+    assert entry.detail == "report #1: approved"
+    response = client.post(reverse("admin:activity_activitylog_changelist"),
+                           {"action": "download_csv", "_selected_action": [entry.pk]})
+    assert response["Content-Type"] == "text/csv" and "report #1: approved" in response.content.decode()
+    assert ActivityLog.objects.filter(action="download").exists()
