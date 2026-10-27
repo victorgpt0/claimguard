@@ -59,6 +59,17 @@ def test_coherence_sample_stratified_with_top3():
     assert (sheet["coherent"] == "").all()
 
 
+def test_coherence_sheet_shows_flag_sources_and_claim_fields():
+    claims = pd.DataFrame({"claim_id": ["A"], "fraud_typology": ["upcoding"], "icd11_code": ["JB22.1"],
+                           "facility_level": [4], "claim_amount": [30000.0],
+                           "service_date": ["2026-01-01"], "discharge_date": ["2026-01-04"]})
+    log = {"claims": [{"claim_ref": "A", "flagged": True, "flag_sources": ["isolation_forest", "text_screen"],
+                       "shap": {"stay_days": 0.2}}]}
+    row = coherence_sheet(log, claims, n=1).iloc[0]
+    assert row["flag_sources"] == "isolation_forest text_screen"
+    assert (row["facility_level"], row["claim_amount"], row["stay_days"]) == (4, 30000.0, 3)
+
+
 def test_coherence_summary_per_typology():
     sheet = pd.DataFrame({"fraud_typology": ["upcoding", "upcoding", "none", "none"],
                           "coherent": ["y", "N", "y", None]})

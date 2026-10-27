@@ -3,8 +3,9 @@
 `sample` draws a typology-stratified sample of flagged claims from a pipeline run log
 (src/pipeline.py: `claims` entries with claim_ref, flagged, reported and shap; reported
 claims only by default, `--all-flagged` for every stage-1 flag) joined to the
-dataset split for the typology, and writes a sheet with each claim's top-3 SHAP
-features and blank `coherent` (y/n) and `reason` columns. Allocation is as equal as
+dataset split for the typology, and writes a sheet with each claim's flag sources, the
+claim fields the features are computed from, its top-3 SHAP features and blank
+`coherent` (y/n) and `reason` columns. Marking guide: docs/shap_coherence_guide.md. Allocation is as equal as
 possible across typologies; a typology with too few flagged claims gives its remainder
 to the others. `summarise` reports the coherent share per typology.
 
@@ -21,6 +22,10 @@ from pathlib import Path
 import pandas as pd
 
 from src.evaluation.faithfulness import top_features
+
+# Claim fields shown beside the features, so the rater can see what each one refers to.
+CONTEXT_COLUMNS = ["facility_level", "beneficiary_type", "patient_age", "patient_sex", "claim_type",
+                   "procedure", "claim_amount", "tariff", "stay_days"]
 
 
 def allocate(available: dict[str, int], n: int) -> dict[str, int]:
@@ -52,7 +57,10 @@ def sample_sheet(log: dict, claims: pd.DataFrame, n: int = 100, seed: int = 0,
     flagged = pd.DataFrame([c for c in log["claims"] if _eligible(c, reported_only)])
     flagged["claim_ref"] = flagged["claim_ref"].astype(str)
     truth = claims.assign(claim_id=claims["claim_id"].astype(str)).set_index("claim_id")
-    flagged = flagged.join(truth[["fraud_typology", "icd11_code"]], on="claim_ref", how="inner")
+    if {"service_date", "discharge_date"} <= set(truth.columns):
+        truth["stay_days"] = (pd.to_datetime(truth["discharge_date"]) - pd.to_datetime(truth["service_date"])).dt.days
+    context = [c for c in CONTEXT_COLUMNS if c in truth.columns]
+    flagged = flagged.join(truth[["fraud_typology", "icd11_code", *context]], on="claim_ref", how="inner")
     quota = allocate(flagged.groupby("fraud_typology").size().to_dict(), n)
     picked = pd.concat([group.sample(n=quota[t], random_state=seed)
                         for t, group in flagged.groupby("fraud_typology") if quota[t]])
@@ -61,7 +69,9 @@ def sample_sheet(log: dict, claims: pd.DataFrame, n: int = 100, seed: int = 0,
         shap = c.shap if isinstance(c.shap, dict) else {}
         row = {"claim_ref": c.claim_ref, "report_id": getattr(c, "report_id", None),
                "fraud_typology": c.fraud_typology, "icd11_code": c.icd11_code,
-               "verdict": getattr(c, "verdict", None), "lane": getattr(c, "lane", None)}
+               "verdict": getattr(c, "verdict", None), "lane": getattr(c, "lane", None),
+               "flag_sources": " ".join(getattr(c, "flag_sources", None) or []),
+               **{col: getattr(c, col) for col in context}}
         features = top_features(shap)
         for i in range(3):
             row[f"feature_{i + 1}"] = features[i] if i < len(features) else ""
