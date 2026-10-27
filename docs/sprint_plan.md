@@ -99,9 +99,9 @@ Started early on 17 Oct. Status on 19 Oct below.
 ### Sprint 7 (26 Oct – 1 Nov): Evaluation and hosting
 - [x] Validation comparison on v0.6 and choice of reported configurations (25 Oct, TC-036): configuration A (the pipeline as designed) and C (`hybrid_text_rules`: text lane OR any rule) are both reported on the test split. Phase 0 order in `docs/platform_plan.md`.
 - [x] GPU baselines and the retraining run on validation (25 Oct, Colab session A; TC-013, TC-014, TC-037): structured-only F1 0.585 ± 0.023 over 3 seeds; zero-shot LLM F1 0.594 against the classifier's 0.952 on the text label (first 1,000 claims); the retrained candidate was refused by the FR-14 gate.
-- [ ] Held-out evaluation against all four baselines: McNemar's test, bootstrap confidence intervals, mean and standard deviation over the structured-only seeds (3, for GPU time).
-- [ ] Stratified results: clean versus noisy text, common versus rare ICD-11 codes.
-- [ ] Cost summary table (fraud value flagged, auditor-hours).
+- [x] Held-out evaluation against all four baselines: McNemar's test, bootstrap confidence intervals, mean and standard deviation over the structured-only seeds (3, for GPU time) (27 Oct, Colab session B; TC-045, TC-046): A F1 0.561, C 0.826, rules 0.578, structured-only 0.588 ± 0.021; text lane 0.890 against the zero-shot LLM's 0.578 on the text label.
+- [x] Stratified results: clean versus noisy text, common versus rare ICD-11 codes (TC-045, TC-046).
+- [x] Cost summary table (fraud value flagged, auditor-hours) (TC-045).
 - [ ] Automated faithfulness check script: a narrative passes only if it names the billed code's official ICD-11 title and refers to specific content from the claim's clinical notes. Run on every report.
 - [ ] Researcher scores 50 random reports on the five-criterion Likert rubric (single-rater; no Krippendorff's alpha).
 - [ ] SHAP coherence check on 100 flagged claims.
