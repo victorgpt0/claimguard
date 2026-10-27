@@ -102,7 +102,7 @@ Started early on 17 Oct. Status on 19 Oct below.
 - [x] Held-out evaluation against all four baselines: McNemar's test, bootstrap confidence intervals, mean and standard deviation over the structured-only seeds (3, for GPU time) (27 Oct, Colab session B; TC-045, TC-046): A F1 0.561, C 0.826, rules 0.578, structured-only 0.588 ± 0.021; text lane 0.890 against the zero-shot LLM's 0.578 on the text label.
 - [x] Stratified results: clean versus noisy text, common versus rare ICD-11 codes (TC-045, TC-046).
 - [x] Cost summary table (fraud value flagged, auditor-hours) (TC-045).
-- [ ] Automated faithfulness check script: a narrative passes only if it names the billed code's official ICD-11 title and refers to specific content from the claim's clinical notes. Run on every report.
+- [x] Automated faithfulness check script: a narrative passes only if it names the billed code's official ICD-11 title and refers to specific content from the claim's clinical notes. Run on every report (28 Oct, TC-047): 141 of 146 test-split narratives pass; of all 11 failures across both databases, 3 are real (definition text presented as note content), 8 are the rule's false negatives.
 - [ ] Researcher scores 50 random reports on the five-criterion Likert rubric (single-rater; no Krippendorff's alpha).
 - [ ] SHAP coherence check on 100 flagged claims.
 - [ ] Project deployed online and the tested setup recorded in `docs/environment.md`.
