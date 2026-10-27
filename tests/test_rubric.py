@@ -13,7 +13,9 @@ def test_sample_is_fixed_size_seeded_and_blind():
     assert list(sheet.columns) == SHEET_COLUMNS
     assert not {"label", "is_fraud", "fraud_typology", "verdict"} & set(sheet.columns)
     assert (sheet[CRITERIA] == "").all().all()
-    assert (sheet["title"] == "Malaria").all()
+    assert (sheet["title"] == "Malaria").all() and (sheet["definition"] == "").all()
+    with_definition = sample_sheet(REPORTS, {"1F40.Z": "Malaria"}, n=5, definitions={"1F40.Z": "A disease"})
+    assert (with_definition["definition"] == "A disease").all()
     assert sheet.equals(sample_sheet(REPORTS, {"1F40.Z": "Malaria"}, n=50, seed=0))
     assert len(sample_sheet(REPORTS[:10], {}, n=50)) == 10
 

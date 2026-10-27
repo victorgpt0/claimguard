@@ -1,8 +1,10 @@
 """Explanation-quality rubric (Section 3.2.4, task 7.5).
 
 `sample` draws narrated reports (fixed seed) from a pipeline run's SQLite database into
-a scoring sheet with a blank 1-5 column per criterion. The sheet carries no
-ground-truth columns, so scoring is blind to the claim's label. `summarise` reports
+a scoring sheet with a blank 1-5 column per criterion. The sheet carries the billed code's
+ICD-11 definition, which the narrator was given, so invented content can be told from
+content taken from the definition; it carries no ground-truth columns, so scoring is
+blind to the claim's label. Anchors for the scores: docs/rubric_guide.md. `summarise` reports
 per-criterion mean ± std and the share of reports scored 4 or higher.
 
     python -m src.evaluation.rubric sample --db test.db --cache artifacts/icd11_cache.json
@@ -20,15 +22,23 @@ from src.evaluation.faithfulness import load_narrated_reports, titles_for
 
 CRITERIA = ["clinical_accuracy", "inconsistency_identification", "clarity", "actionability",
             "no_hallucination"]
-SHEET_COLUMNS = ["report_id", "icd11_code", "title", "notes", "narrative"] + CRITERIA
+SHEET_COLUMNS = ["report_id", "icd11_code", "title", "definition", "notes", "narrative"] + CRITERIA
 GOOD_SCORE = 4
 
 
-def sample_sheet(reports: list[dict], titles: dict[str, str], n: int = 50, seed: int = 0) -> pd.DataFrame:
+def definitions_for(codes, cache_path: Path) -> dict[str, str]:
+    from src.icd11.cache import ICD11Cache
+    cache = ICD11Cache(cache_path)
+    return {code: (cache.get(code).definition or "") if code in cache else "" for code in set(codes)}
+
+
+def sample_sheet(reports: list[dict], titles: dict[str, str], n: int = 50, seed: int = 0,
+                 definitions: dict[str, str] | None = None) -> pd.DataFrame:
     frame = pd.DataFrame(reports)
     frame = frame.sample(n=min(n, len(frame)), random_state=seed).sort_values("report_id")
     sheet = pd.DataFrame({"report_id": frame["report_id"], "icd11_code": frame["icd11_code"],
                           "title": frame["icd11_code"].map(titles).fillna(""),
+                          "definition": frame["icd11_code"].map(definitions or {}).fillna(""),
                           "notes": frame["clinical_notes"], "narrative": frame["llm_narrative"]})
     for criterion in CRITERIA:
         sheet[criterion] = ""
@@ -69,8 +79,9 @@ def main() -> None:
         reports = load_narrated_reports(args.db)
         if not reports:
             parser.error(f"no narrated reports in {args.db}")
-        sheet = sample_sheet(reports, titles_for([r["icd11_code"] for r in reports], args.cache),
-                             args.n, args.seed)
+        codes = [r["icd11_code"] for r in reports]
+        sheet = sample_sheet(reports, titles_for(codes, args.cache), args.n, args.seed,
+                             definitions_for(codes, args.cache))
         args.out.parent.mkdir(parents=True, exist_ok=True)
         sheet.to_csv(args.out, index=False)
         print(f"{len(sheet)} reports -> {args.out}")
