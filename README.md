@@ -51,31 +51,35 @@ docs/diagrams/               # Chapter 4 diagrams for the Django platform (Plant
 
 ## Setup
 
-1. **Clone and create a virtual environment:**
+1. **Clone and install.** Dependencies are locked in `uv.lock` (`pyproject.toml` groups:
+   `web`, `ml`, `dev`; torch comes from the CPU-only index locally):
    ```bash
    git clone git@github.com:victorgpt0/claimguard.git
    cd claimguard
-   python3 -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
+   python3 -m venv .venv && .venv/bin/pip install uv
+   .venv/bin/uv sync --frozen        # everything; or: --no-default-groups --group web --group dev
    ```
+   `requirements.txt` is kept for the older `venv/`; `requirements/colab-worker.txt` is what
+   the Colab GPU worker installs. Every command below assumes `.venv`.
 
 2. **Configure:**
    ```bash
-   cp config/config.example.yaml config/config.yaml
-   cp .env.example .env
-   # fill in .env: HF_TOKEN / OPENAI_API_KEY (no ICD-11 credentials needed — see step 3)
+   cp config/config.example.yaml config/config.yaml   # paths to the Drive folders; keep pipeline.dataset
+   cp .env.example .env                               # without DATABASE_URL the web app runs on SQLite
    ```
+   Fill in `.env` as `.env.example` describes (HF_TOKEN / OPENAI_API_KEY, database, Redis,
+   Google sign-in). `config.yaml` and `.env` are gitignored — never commit them. On Colab,
+   use Colab Secrets (`google.colab.userdata`) instead of `.env`.
 
-3. **Start the WHO ICD-11 API (self-hosted, not the cloud API):**
+3. **WHO ICD-11 API (self-hosted, only needed to refresh the cache):**
    ```bash
-   docker compose up -d
+   docker compose up -d icd11-api
    curl http://localhost:8081/icd/release/11/2026-01/mms  # sanity check it's up
+   .venv/bin/python -m src.icd11.refresh_cache --codes-file data/processed/icd11_codes_used.txt \
+       --cache-path artifacts/icd11_cache.json
    ```
-   No OAuth2 credentials needed for a local deployment. See `docs/environment.md` for the
-   Colab-reachability caveat (Colab can't reach this container directly) before Sprint 3.
-   `config.yaml` and `.env` are gitignored — never commit them. On Colab, prefer
-   `google.colab.userdata` for secrets instead of `.env` (see `implementation_roadmap.md`).
+   No OAuth2 credentials are needed for a local deployment. Everything else reads the cache
+   file, never the live API, so it also runs on Colab (see `docs/environment.md`).
 
 ## Web application (Django)
 
@@ -85,14 +89,15 @@ validation, processing as background jobs on a local CPU worker or a Colab GPU w
 review queue and report pages, a summary report per batch, user management and an activity
 log. The Streamlit dashboard it replaced was removed on 1 Nov (it is in the git history).
 
-Dependencies are locked in `uv.lock` (`pyproject.toml` groups: `web`, `ml`,
-`dev`; torch comes from the CPU-only index locally):
+After Setup, the quickest run is SQLite plus a local Redis:
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install uv
-.venv/bin/uv sync --frozen        # everything; or: --no-default-groups --group web --group dev
-cp .env.example .env              # without DATABASE_URL it runs on SQLite (web/db.sqlite3)
-cp config/config.example.yaml config/config.yaml   # paths to the Drive folders; keep pipeline.dataset
+docker compose up -d redis
+cd web
+../.venv/bin/python manage.py migrate
+../.venv/bin/python manage.py createsuperuser    # then set the Administrator role in /admin
+../.venv/bin/python manage.py runserver          # http://localhost:8000
+# second terminal, from the repo root: the CPU worker (see Batches and jobs)
 ```
 
 **Database and queue.** Set in `.env` (`.env.example` explains each variable):
@@ -186,22 +191,32 @@ The synthetic claims dataset is built in three stages (Section 3.2.1); all three
 - `data/processed/manifest.json` records the git commit, input file hashes, parameters
   and per-split counts.
 
-## Running
+## Running the pipeline and the evaluation (command line)
 
-Claims are uploaded in the web application and processed as a job by the CPU worker or the
-Colab GPU worker, which write straight to the shared database (see Web application).
-`notebooks/03_run_pipeline.ipynb` remains for the evaluation runs; it writes to
-`MyDrive/claimguard/db/` SQLite files, which the web application does not read.
-`import_sqlite` carried the Streamlit-era review database over once and refuses to run again.
+Claims uploaded in the web application are processed as jobs by the CPU worker or the
+Colab GPU worker, which write straight to the shared database (see Web application). The
+research runs use the modules below instead; each has a usage block in its docstring and
+`--help`. The notebooks (`notebooks/README.md`) run the GPU steps on Colab. Run from the
+repo root with `.venv/bin/python -m ...`.
 
-**Before Sprint 3** (ICD-11 integration), refresh the local ICD-11 cache once against the
-running container rather than requiring live access on every claim:
-```bash
-docker compose up -d
-python -m src.icd11.refresh_cache --codes-file data/processed/icd11_codes_used.txt \
-    --cache-path artifacts/icd11_cache.json
-docker compose down
-```
+| Step | Command |
+|---|---|
+| Export classifier input | `python -m src.classification.export --data data/processed/v0.6-20k --cache artifacts/icd11_cache.json --out data/classifier/v0.6-20k` |
+| Fine-tune the classifier, 5 seeds (GPU) | `python -m src.classification.train --train-file <dir>/train.jsonl --val-file <dir>/validation.jsonl --experiments-dir experiments/classifier` |
+| Seed summary | `python -m src.classification.summarize_seeds --runs experiments/classifier` |
+| Stratified classifier evaluation | `python -m src.classification.evaluate --checkpoint <run dir> --data data/classifier/v0.6-20k --split validation` |
+| Tune stage 1 (writes `thresholds:` values) | `python -m src.detection.tune_stage1 --data data/processed/v0.6-20k --cache artifacts/icd11_cache.json` |
+| Run the pipeline on a batch | `python -m src.pipeline --data data/processed/v0.6-20k --batch deployment_pool --cache artifacts/icd11_cache.json --classifier <adapter dir> --db audit.sqlite --config config/config.yaml` |
+| Baselines | `src.baselines.rule_based`, `src.baselines.structured_only`, `src.baselines.zero_shot_llm`, `src.detection.evaluate_baseline` |
+| Held-out comparison, cost, Configuration C | `src.evaluation.heldout`, `src.evaluation.cost`, `src.evaluation.hybrid` |
+| Narrative and SHAP checks | `src.evaluation.faithfulness`, `src.evaluation.rubric`, `src.evaluation.shap_coherence` |
+| Feedback retraining (FR-12 to FR-14, GPU) | `python -m src.feedback.run_retraining --classifier-data data/classifier/v0.6-20k` |
+
+**The test split has already been read** (Session B, #33): anything that scores it needs
+`--final` and must not be rerun. Do not rerun `run_retraining --simulate-auditor`.
+`src.pipeline --db` writes a SQLite file, which the web application does not read
+(`import_sqlite` carried the Streamlit-era review database over once and refuses to run
+again).
 
 ## Testing
 
@@ -209,8 +224,8 @@ docker compose down
 .venv/bin/python -m pytest -q     # ML and web suites
 ```
 
-Use `python -m pytest`, not bare `pytest`: there is no package config, and `python -m` is
-what puts the repo root on `sys.path`.
+`pyproject.toml` sets the pytest paths and the Django settings, so this runs from the repo
+root. Set `DATABASE_URL` to run the web tests on PostgreSQL instead of SQLite.
 
 Tests mock anything that would otherwise need a GPU, a real model download, or a live
 external API (HF/OpenAI calls, the ICD-11 container, transformer weight loading) — they
@@ -225,14 +240,15 @@ Chapter 5's Table 5.3 uses, kept live from the start rather than reconstructed l
 implementation is done: what's trained and where (Colab vs. local), where every
 artifact is stored (Drive during development, Hugging Face Hub as the deployment
 hand-off), the deployed dashboard's own storage/persistence decision, an end-to-end
-data-flow diagram, and the remaining Sprint-by-Sprint checklist. Read this before
-starting Sprint 1.
+data-flow diagram, and the remaining Sprint-by-Sprint checklist. Current status is in
+`docs/remaining_work_plan.md` and `docs/platform_plan.md`.
 
 ## Deployment
 
 The Django application uses hosted Neon PostgreSQL and Upstash Redis (see Web application);
-only the web process itself still needs a host (#32, #39). The hosting guide below was
-written for the Streamlit dashboard; its options still apply to the web process.
+only the web process itself still needs a host (#32, #39). `docker compose up -d --build db
+redis web` runs it in a container (gunicorn). The hosting guide below was written for the
+Streamlit dashboard; its options still apply to the web process.
 
 Free hosting on your own domain: see `docs/hosting_guide.md` for two options (Cloudflare
 Tunnel for a self-hosted demo, or Hugging Face Spaces + a Cloudflare Worker reverse proxy
