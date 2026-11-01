@@ -37,15 +37,13 @@ src/
 ├── narrative/            # AuditNarrativeGenerator (LLM, explanation-only)
 ├── reporting/            # AuditReportGenerator, AuditReportRepository
 ├── feedback/              # FeedbackRepository (FR-12), ClassifierRetrainer (FR-13/FR-14)
-├── auth/                  # User entity, authenticate() (NFR-03, PBKDF2-hashed passwords)
-└── db/                    # Streamlit-era SQLite schema + seed script (imported into Django)
+└── db/                    # SQLite schema the pipeline writes reports to (imported into Django)
 web/                         # Django application (IR-03, IR-04, IR-07, IR-08)
 ├── claimguard_web/          # settings (env-driven), URLs, Celery app
 ├── accounts/                # User with role, allauth adapters (Google, no sign-up), admin site
 ├── activity/                # ActivityLog (FR-18)
 └── audit/                   # Batch, Claim, ClassifierVerdict, AuditReport, Job; pages; upload
                              # validation (FR-15); process_batch task; batch summary (FR-16)
-dashboard/app.py             # Streamlit dashboard, kept until the django branch is merged
 notebooks/05_gpu_worker.ipynb  # Colab GPU worker for the "gpu" queue
 docker-compose.yml           # PostgreSQL, Redis, the web service, WHO ICD-11 API
 docs/diagrams/               # Chapter 4 diagrams for the Django platform (PlantUML + PNG)
@@ -79,24 +77,15 @@ docs/diagrams/               # Chapter 4 diagrams for the Django platform (Plant
    `config.yaml` and `.env` are gitignored — never commit them. On Colab, prefer
    `google.colab.userdata` for secrets instead of `.env` (see `implementation_roadmap.md`).
 
-4. **Initialise the database:**
-   ```bash
-   python -m src.db.seed --db-path /path/to/sha_fraud.sqlite [--auditor auditor]
-   ```
-   Creates the schema (Figure 4.7) and the first Administrator account, `admin` by default
-   (`--admin` changes the name); the password is asked for and must be at least 10
-   characters. `--auditor` also creates one Auditor account. Re-running leaves existing
-   accounts unchanged, so it never resets a password.
-
-## Web application (Django, branch `django`)
+## Web application (Django)
 
 The Django application in `web/` replaces the Streamlit dashboard (`docs/platform_plan.md`):
 accounts with the two roles and Google sign-in for linked accounts, batch upload with full
 validation, processing as background jobs on a local CPU worker or a Colab GPU worker, the
 review queue and report pages, a summary report per batch, user management and an activity
-log. The Streamlit dashboard in `dashboard/` (see Running) is kept until the branch is merged.
+log. The Streamlit dashboard it replaced was removed on 1 Nov (it is in the git history).
 
-Dependencies are locked in `uv.lock` (`pyproject.toml` groups: `web`, `ml`, `streamlit`,
+Dependencies are locked in `uv.lock` (`pyproject.toml` groups: `web`, `ml`,
 `dev`; torch comes from the CPU-only index locally):
 
 ```bash
@@ -199,52 +188,11 @@ The synthetic claims dataset is built in three stages (Section 3.2.1); all three
 
 ## Running
 
-The pipeline runs on Colab (`notebooks/03_run_pipeline.ipynb`) and writes its audit
-reports to `MyDrive/claimguard/db/sha_fraud.sqlite`. The dashboard runs on a laptop
-against a downloaded copy of that database:
-
-1. Download `MyDrive/claimguard/db/sha_fraud.sqlite` to `db/sha_fraud.sqlite`, and
-   `MyDrive/claimguard/artifacts/icd11_cache.json` to `artifacts/` (the review screen
-   shows each billed code's ICD-11 reference text from it).
-2. Create `config/config.yaml` from `config/config.example.yaml` with repo-relative paths
-   (`db_path: db/sha_fraud.sqlite`, `artifacts_dir: artifacts`, `model_dir: models`).
-   Relative paths resolve against the repo root.
-3. Optionally, for the latest run's funnel chart, download the newest log in
-   `MyDrive/claimguard/experiments/pipeline_runs/` to `experiments/pipeline_runs/`.
-4. From the repo root:
-
-```bash
-venv/bin/python -m streamlit run dashboard/app.py
-```
-
-Use `python -m streamlit`, not the bare `streamlit` command: it puts the repo root on the
-import path, so `src` can be imported. Decisions are written to the local copy, so upload
-it back to Drive to keep them. Approve and reject decisions also append labelled
-examples to `artifacts/feedback_dataset/examples.jsonl` (FR-12). For the Model performance
-tab, copy the active classifier run folder to `models/classifier_lora/active/`.
-
-The dashboard opens on a sign-in form (NFR-03); create the accounts first with
-`src.db.seed` (step 4 above) against the same database. Each role sees its own tabs (IR-03):
-the Fraud Auditor sees Overview, Review queue and Account, and every decision is stored with
-the auditor's identity (FR-09); the Administrator sees Overview, Model performance, Feedback
-loop, Users, Activity log and Account. In Users the Administrator creates accounts,
-deactivates or reactivates them (never deletes, so decisions stay attributable; the last
-active Administrator is protected), resets passwords and links Google accounts. Everyone can
-change their own password under Account. Sign-ins (including failed ones), sign-outs,
-decisions and account changes are recorded in the activity log, which the Administrator can
-filter and download as CSV; it never holds a password or note text. A session idle for `auth.session_timeout_minutes` (default 30) is signed out.
-
-**Sign in with Google (optional, #61).** Copy `.streamlit/secrets.example.toml` to
-`.streamlit/secrets.toml` (gitignored) and fill in an OAuth client from Google Cloud Console
-(APIs & Services, Credentials, OAuth client ID, type Web application, authorised redirect
-URI `http://localhost:8501/oauth2callback`). Google only proves who someone is: a Google
-account gets in only after it is linked to an existing user, and then with that user's role.
-```bash
-python -m src.db.seed --db-path <db> --link-email auditor someone@gmail.com
-```
-(or, once signed in as the Administrator, in the Users tab).
-Without `secrets.toml` the button is hidden and password sign-in works as before. Passwords
-are stored only as salted PBKDF2-SHA256 hashes.
+Claims are uploaded in the web application and processed as a job by the CPU worker or the
+Colab GPU worker, which write straight to the shared database (see Web application).
+`notebooks/03_run_pipeline.ipynb` remains for the evaluation runs; it writes to
+`MyDrive/claimguard/db/` SQLite files, which the web application does not read.
+`import_sqlite` carried the Streamlit-era review database over once and refuses to run again.
 
 **Before Sprint 3** (ICD-11 integration), refresh the local ICD-11 cache once against the
 running container rather than requiring live access on every claim:
@@ -258,7 +206,7 @@ docker compose down
 ## Testing
 
 ```bash
-venv/bin/python -m pytest -q
+.venv/bin/python -m pytest -q     # ML and web suites
 ```
 
 Use `python -m pytest`, not bare `pytest`: there is no package config, and `python -m` is
@@ -283,8 +231,8 @@ starting Sprint 1.
 ## Deployment
 
 The Django application uses hosted Neon PostgreSQL and Upstash Redis (see Web application);
-only the web process itself still needs a host (#32, #39). The older notes below were
-written for the Streamlit dashboard.
+only the web process itself still needs a host (#32, #39). The hosting guide below was
+written for the Streamlit dashboard; its options still apply to the web process.
 
 Free hosting on your own domain: see `docs/hosting_guide.md` for two options (Cloudflare
 Tunnel for a self-hosted demo, or Hugging Face Spaces + a Cloudflare Worker reverse proxy

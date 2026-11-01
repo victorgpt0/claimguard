@@ -20,4 +20,3 @@ def test_package_imports():
     import src.reporting.repository  # noqa: F401
     import src.feedback.feedback_repository  # noqa: F401
     import src.feedback.retrainer  # noqa: F401
-    import src.auth.user  # noqa: F401

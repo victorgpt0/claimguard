@@ -102,3 +102,8 @@ the activity-log screen are cut before anything in the evaluation.
     supervisor's agreement to the change of stack; hosting the web process (#32, #39);
     merging `django` into `dev` (expect a trivial conflict in `tests/test_plan.md`, where
     `dev` added TC-037).
+- **1 Nov:** `django` merged into `dev` (288 tests passed); the Streamlit dashboard
+  (`dashboard/`, `.streamlit/`), its sign-in layer (`src/auth/`, `src/db/seed.py`), their
+  tests and the `streamlit` dependency group removed. `src/db/schema.sql` and the SQLite
+  repository stay: the evaluation runs still write to SQLite. Still open: the GPU worker's
+  first run, hosting (#32, #39), the supervisor's agreement.

@@ -37,12 +37,6 @@ ml = [
     "huggingface_hub>=0.25.0,<2",             # 2.x drops InferenceClient.text_generation (#53)
     "openai>=1.40.0",
 ]
-# The Streamlit dashboard, kept until the Django screens replace it (phase 2).
-streamlit = [
-    "streamlit>=1.38.0",
-    "Authlib>=1.3.2",
-    "altair>=5.0",
-]
 dev = [
     "pytest>=8.3.2",
     "pytest-mock>=3.14.0",
@@ -50,7 +44,7 @@ dev = [
 ]
 
 [tool.uv]
-default-groups = ["web", "ml", "streamlit", "dev"]
+default-groups = ["web", "ml", "dev"]
 package = false
 
 [[tool.uv.index]]
