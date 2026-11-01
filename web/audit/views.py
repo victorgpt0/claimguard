@@ -1,0 +1,215 @@
+"""The dashboard's pages (IR-03). The Fraud Auditor reviews (queue, report, decision); the
+Administrator monitors (model performance, feedback loop) and manages accounts in the admin
+site; both see the overview."""
+from __future__ import annotations
+
+from collections import Counter
+
+from django.contrib import messages
+from django.db import transaction
+from django.db.models import Count, Sum
+from django.http import HttpResponseNotAllowed
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils import timezone
+
+from accounts.roles import administrator_required, any_role_required, auditor_required
+from activity.models import ActivityLog
+
+from . import charts, services
+from .models import AuditReport, ClassifierVerdict
+
+DECISIONS = [AuditReport.Status.APPROVED, AuditReport.Status.REJECTED, AuditReport.Status.ESCALATED]
+LANES = {"text_inconsistent": ClassifierVerdict.Verdict.INCONSISTENT,
+         "structural_anomaly": ClassifierVerdict.Verdict.CONSISTENT}
+
+
+def kes(amount) -> str:
+    return f"KES {float(amount or 0):,.0f}"
+
+
+def _config_or_none(request):
+    try:
+        return services.config()
+    except services.ConfigMissing as exc:
+        messages.warning(request, f"{exc} Pages that read pipeline outputs are limited until it exists.")
+        return None
+
+
+# --- Overview (both roles) --------------------------------------------------------------------
+
+@any_role_required
+def overview(request):
+    reports = AuditReport.objects.select_related("claim", "verdict")
+    total = reports.count()
+    context = {"total": total}
+    if total:
+        by_status = dict(reports.values_list("status").annotate(n=Count("id")))
+        inconsistent = reports.filter(verdict__verdict=ClassifierVerdict.Verdict.INCONSISTENT)
+        reviewed = total - by_status.get("pending", 0)
+        context["tiles"] = [
+            ("Flagged claims", total, ""),
+            ("Pending review", by_status.get("pending", 0), ""),
+            ("Reviewed", reviewed, f"{reviewed / total:.0%} of reports"),
+            ("Inconsistent verdicts", inconsistent.count(),
+             f"{inconsistent.exclude(llm_narrative=None).count()} with narrative"),
+            ("Amount under audit", kes(reports.aggregate(s=Sum("claim__claim_amount"))["s"]), ""),
+        ]
+        verdicts = Counter(r.verdict.verdict if r.verdict else "none" for r in reports)
+        providers = (reports.values("claim__provider_id")
+                     .annotate(claims=Count("id"), amount=Sum("claim__claim_amount")).order_by("-claims")[:10])
+        codes = (reports.values("claim__icd11_code")
+                 .annotate(claims=Count("id"), amount=Sum("claim__claim_amount")).order_by("-amount")[:10])
+        context["charts"] = {
+            "status": charts.donut({s: by_status.get(s, 0) for s in ["pending", *DECISIONS]}, "status"),
+            "verdicts": charts.donut(dict(verdicts), "verdict"),
+            "scores": charts.anomaly_histogram([
+                {"anomaly_score": r.claim.anomaly_score, "verdict": r.verdict.verdict if r.verdict else "none"}
+                for r in reports if r.claim.anomaly_score is not None]),
+            "shap": charts.shap_frequency([r.shap_attribution for r in reports]),
+            "providers": charts.horizontal_bars(
+                [{"provider": p["claim__provider_id"], "claims": p["claims"], "amount": float(p["amount"])}
+                 for p in providers], "provider", "claims", "Flagged claims",
+                tooltip=[{"field": "provider"}, {"field": "claims"}, {"field": "amount", "format": ",.0f", "title": "KES"}]),
+            "codes": charts.horizontal_bars(
+                [{"code": c["claim__icd11_code"], "claims": c["claims"], "amount": float(c["amount"])}
+                 for c in codes], "code", "amount", "KES",
+                tooltip=[{"field": "code"}, {"field": "claims"}, {"field": "amount", "format": ",.0f", "title": "KES"}]),
+        }
+    if _config_or_none(request) is not None:
+        run = services.latest_pipeline_run()
+        if run:
+            context["run"] = run
+            context["charts"] = {**context.get("charts", {}), "funnel": charts.funnel(run["summary"])}
+            by_typology = (run.get("evaluation") or {}).get("flagged_by_typology")
+            if by_typology:
+                context["charts"]["typology"] = charts.share_by_typology(
+                    [{"typology": services.TYPOLOGY_NAMES.get(t, t), "share": v["sum"] / v["size"],
+                      "flagged": v["sum"], "claims": v["size"]} for t, v in by_typology.items()],
+                    "Share flagged at stage 1 (ground truth)")
+    context["chart_specs"] = {f"chart-{name}": spec for name, spec in context.get("charts", {}).items()}
+    return render(request, "audit/overview.html", context)
+
+
+# --- Review (Fraud Auditor) ---------------------------------------------------------------------
+
+def _pending(lane: str | None, order: str):
+    pending = (AuditReport.objects.filter(status=AuditReport.Status.PENDING)
+               .select_related("claim", "verdict"))
+    if lane in LANES:
+        pending = pending.filter(verdict__verdict=LANES[lane])
+    return pending.order_by("-claim__anomaly_score", "id") if order == "score" else pending.order_by("created_at", "id")
+
+
+@auditor_required
+def queue(request):
+    lane, order = request.GET.get("lane", ""), request.GET.get("order", "score")
+    pending = _pending(lane, order)
+    lane_counts = dict(AuditReport.objects.filter(status=AuditReport.Status.PENDING)
+                       .values_list("verdict__verdict").annotate(n=Count("id")))
+    return render(request, "audit/queue.html", {
+        "reports": pending[:200], "pending_count": pending.count(), "lane": lane, "order": order,
+        "lane_counts": {"text_inconsistent": lane_counts.get("inconsistent", 0),
+                        "structural_anomaly": lane_counts.get("consistent", 0)}})
+
+
+@auditor_required
+def report_detail(request, pk: int):
+    """The six panels in pipeline order (NFR-07): the claim's inputs (1-3), then what each
+    stage concluded (4-6), on one page with the decision."""
+    report = get_object_or_404(AuditReport.objects.select_related("claim", "verdict", "reviewed_by"), pk=pk)
+    claim = report.claim
+    stay = None
+    if claim.discharge_date:
+        stay = (claim.discharge_date - claim.service_date).days
+    definition = None
+    if _config_or_none(request) is not None:
+        definition = services.icd11_definition(claim.icd11_code)
+    return render(request, "audit/report.html", {
+        "report": report, "claim": claim, "stay": stay, "definition": definition, "amount": kes(claim.claim_amount),
+        "sources": [services.SOURCE_NAMES.get(s, s) for s in report.flag_sources or []],
+        "shap_chart": charts.shap_contributions(report.shap_attribution) if report.shap_attribution else None,
+        "decisions": DECISIONS, "query": request.GET.urlencode()})
+
+
+@auditor_required
+def decide(request, pk: int):
+    """FR-09: the decision, its time and the auditor; FR-12: approve and reject become
+    labelled feedback examples. Only a pending report can be decided, once."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    decision = request.POST.get("decision")
+    if decision not in DECISIONS:
+        messages.error(request, "Unknown decision.")
+        return redirect("audit:report", pk=pk)
+    with transaction.atomic():
+        report = get_object_or_404(AuditReport.objects.select_for_update(of=("self",)).select_related("claim", "verdict"), pk=pk)
+        if report.status != AuditReport.Status.PENDING:
+            messages.warning(request, f"Report #{pk} was already {report.status}.")
+            return redirect("audit:queue")
+        report.status, report.reviewed_by, report.reviewed_at = decision, request.user, timezone.now()
+        report.save(update_fields=["status", "reviewed_by", "reviewed_at"])
+        ActivityLog.record(ActivityLog.Action.DECISION, request.user, f"report #{pk}: {decision}")
+    if decision in (AuditReport.Status.APPROVED, AuditReport.Status.REJECTED):
+        _write_feedback_example(request, report, decision)
+    messages.success(request, f"Report #{pk}: {decision}.")
+    lane, order = request.POST.get("lane", ""), request.POST.get("order", "score")
+    following = _pending(lane, order).first()
+    if following:
+        return redirect(f"{reverse('audit:report', args=[following.pk])}?lane={lane}&order={order}")
+    return redirect(f"{reverse('audit:queue')}?lane={lane}&order={order}")
+
+
+def _write_feedback_example(request, report: AuditReport, decision: str) -> None:
+    try:
+        services.feedback_repository().materialize_example(
+            claim={"id": report.claim.claim_ref, "clinical_notes": report.claim.clinical_notes,
+                   "icd11_code": report.claim.icd11_code},
+            verdict={"verdict": report.verdict.verdict if report.verdict else None},
+            auditor_decision=decision, icd11_definition=services.code_reference(report.claim.icd11_code))
+    except services.ConfigMissing:
+        messages.warning(request, "The decision is saved, but no feedback example was written: config.yaml is missing.")
+
+
+# --- Monitoring (Administrator) ----------------------------------------------------------------
+
+@administrator_required
+def model_performance(request):
+    context = {}
+    if _config_or_none(request) is not None:
+        path = services.active_model_path()
+        metrics = services.read_json(path / "metrics.json")
+        context.update(path=path, metrics=metrics, record=services.read_json(path / "config.json") or {})
+        evaluation = services.read_json(path / "evaluation_validation.json") if metrics else None
+        if evaluation:
+            should_flag = {"upcoding", "ghost_billing", "record_fabrication"}
+            context["typology_chart"] = charts.share_by_typology(
+                [{"typology": services.TYPOLOGY_NAMES.get(t, t), "share": v["rate"], "flagged": v["flagged"],
+                  "claims": v["claims"], "should be flagged": "yes" if t in should_flag else "no"}
+                 for t, v in evaluation["flagged_by_typology"].items()],
+                "Share flagged", color=charts.SHOULD_FLAG_COLOR)
+            context["strata"] = [
+                ("Clean vs noisy text", {{"False": "Clean", "True": "Noisy"}.get(k, k): v
+                                         for k, v in evaluation["text_noise"].items()}),
+                ("Common vs rare ICD-11 codes", evaluation["code_frequency"])]
+            context["rare_threshold"] = evaluation.get("rare_code_threshold")
+        if metrics:
+            context["caught"] = round(metrics["recall"] * metrics["positives"])
+    return render(request, "audit/model.html", context)
+
+
+@administrator_required
+def feedback_loop(request):
+    context = {}
+    if _config_or_none(request) is not None:
+        feedback = services.feedback_repository()
+        examples = feedback.read_examples(since_consumed_marker=False)
+        trigger = services.retrain_trigger_count()
+        unconsumed = feedback.count_unconsumed_examples()
+        context.update(examples=examples[-200:][::-1], total=len(examples), unconsumed=unconsumed, trigger=trigger,
+                       progress=min(100, round(100 * unconsumed / trigger)) if trigger else 0,
+                       due=unconsumed >= trigger,
+                       history=[{**row, "checkpoint": str(row.get("candidate_path", "")).rstrip("/").split("/")[-1]}
+                                for row in reversed(services.retraining_history())])
+    return render(request, "audit/feedback.html", context)
+

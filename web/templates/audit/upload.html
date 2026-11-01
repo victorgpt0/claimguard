@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block head_title %}Upload a claims batch{% endblock %}
+{% block content %}
+<h1>Upload a claims batch</h1>
+<section class="card">
+  <p class="caption">A CSV file with one claim per line and these columns: <code>{{ columns|join:", " }}</code>.
+  Dates as YYYY-MM-DD; a blank discharge date means an outpatient claim. At most 2,000 claims.
+  Every line is checked first, and the file is stored only if all of them pass.
+  <a href="{% url 'audit:upload_template' %}">Download a template</a>.</p>
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}{{ form.as_p }}<button>Check and upload</button></form>
+</section>
+{% if problems %}
+<section class="card">
+  <h2>{{ problems|length }} problem{{ problems|length|pluralize }}: nothing was stored</h2>
+  <table class="list"><thead><tr><th>Line</th><th>Column</th><th>Problem</th></tr></thead>
+  <tbody>{% for p in shown %}<tr><td>{{ p.row|default:"file" }}</td><td>{{ p.column }}</td><td>{{ p.message }}</td></tr>{% endfor %}</tbody></table>
+  {% if problems|length > 200 %}<p class="caption">Showing the first 200.</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

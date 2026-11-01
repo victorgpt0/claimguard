@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block head_title %}Review queue{% endblock %}
+{% block content %}
+<h1>Review queue <span class="count">{{ pending_count }} pending</span></h1>
+<form method="get" class="filters">
+  <label>Lane
+    <select name="lane" onchange="this.form.submit()">
+      <option value="" {% if not lane %}selected{% endif %}>All</option>
+      <option value="text_inconsistent" {% if lane == "text_inconsistent" %}selected{% endif %}>Text inconsistent ({{ lane_counts.text_inconsistent }})</option>
+      <option value="structural_anomaly" {% if lane == "structural_anomaly" %}selected{% endif %}>Structural anomaly ({{ lane_counts.structural_anomaly }})</option>
+    </select></label>
+  <label>Order
+    <select name="order" onchange="this.form.submit()">
+      <option value="score" {% if order == "score" %}selected{% endif %}>Highest anomaly score</option>
+      <option value="oldest" {% if order == "oldest" %}selected{% endif %}>Oldest first</option>
+    </select></label>
+  <noscript><button>Apply</button></noscript>
+</form>
+<p class="caption">Text inconsistent: the notes do not support the billed code. Structural anomaly: the notes are consistent, but the billing fields look anomalous.</p>
+{% if reports %}
+<table class="list">
+  <thead><tr><th>#</th><th>Lane</th><th>Claim</th><th>Provider</th><th>Code</th><th class="num">Amount (KES)</th><th class="num">Score</th></tr></thead>
+  <tbody>{% for r in reports %}
+    <tr><td><a href="{% url 'audit:report' r.pk %}?lane={{ lane }}&order={{ order }}">#{{ r.pk }}</a></td>
+      <td>{% include "audit/lane_badge.html" with lane=r.lane %}</td>
+      <td>{{ r.claim.claim_ref }}</td><td>{{ r.claim.provider_id }}</td><td>{{ r.claim.icd11_code }}</td>
+      <td class="num">{{ r.claim.claim_amount|floatformat:"0g" }}</td><td class="num">{{ r.claim.anomaly_score|floatformat:3 }}</td></tr>
+  {% endfor %}</tbody>
+</table>
+{% if pending_count > 200 %}<p class="caption">Showing the first 200.</p>{% endif %}
+{% else %}<p class="empty">No pending reports{% if lane %} in this lane{% endif %}.</p>{% endif %}
+{% endblock %}

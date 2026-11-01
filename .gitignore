@@ -38,3 +38,10 @@ dist/
 .DS_Store
 .vscode/
 .idea/
+
+# Django application (web/)
+web/db.sqlite3
+web/staticfiles/
+media/
+.neon
+node_modules/

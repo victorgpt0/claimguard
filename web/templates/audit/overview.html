@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block head_title %}Overview{% endblock %}
+{% block content %}
+<h1>Overview</h1>
+{% if not total %}
+  <p class="empty">No audit reports yet. Run the pipeline on a batch first.</p>
+{% else %}
+  <div class="tiles">{% for label, value, note in tiles %}
+    <div class="tile"><span class="label">{{ label }}</span><span class="value">{{ value }}</span>{% if note %}<span class="note">{{ note }}</span>{% endif %}</div>
+  {% endfor %}</div>
+{% endif %}
+{% if run %}
+  <section class="card">
+    <h2>Latest pipeline run</h2>
+    <p class="caption">Started {{ run.started_at|slice:":16" }} UTC, batch of {{ run.summary.claims }} claims.
+    {% if run.summary.reported %}Queued for review: {{ run.summary.reported.text_inconsistent }} text inconsistent,
+    {{ run.summary.reported.structural_anomaly }} structural anomaly; {{ run.summary.screen_false_positives|default:0 }}
+    text-screen flags the classifier cleared were logged only.{% endif %}</p>
+    <div class="grid2">
+      <div data-chart="chart-funnel"></div>
+      {% if charts.typology %}<div><div data-chart="chart-typology"></div>
+        <p class="caption">Stage-1 recall {{ run.evaluation.stage1_recall|floatformat:2 }}. Ground truth exists only because the data is synthetic.</p></div>{% endif %}
+    </div>
+  </section>
+{% endif %}
+{% if total %}
+<div class="grid2">
+  <section class="card"><h2>Review status</h2><div data-chart="chart-status"></div></section>
+  <section class="card"><h2>Classifier verdicts</h2><div data-chart="chart-verdicts"></div></section>
+  <section class="card"><h2>Anomaly scores of flagged claims</h2><p class="caption">Isolation Forest score: higher is more anomalous.</p><div data-chart="chart-scores"></div></section>
+  <section class="card"><h2>Why claims were flagged</h2><p class="caption">How often each feature is among a claim's top 3 SHAP attributions.</p><div data-chart="chart-shap"></div></section>
+  <section class="card"><h2>Providers with the most flagged claims</h2><div data-chart="chart-providers"></div></section>
+  <section class="card"><h2>Flagged amount by ICD-11 code</h2><div data-chart="chart-codes"></div></section>
+</div>
+{% endif %}
+{% endblock %}
+{% block charts %}
+{% for name, spec in chart_specs.items %}{{ spec|json_script:name }}{% endfor %}
+{% include "partials_charts.html" %}
+{% endblock %}

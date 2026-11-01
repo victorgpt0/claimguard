@@ -1,0 +1,38 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block head_title %}ClaimGuard{% endblock %} · ClaimGuard</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="{% url 'home' %}">ClaimGuard <span>SHA post-payment fraud audit</span></a>
+  {% if user.is_authenticated %}
+  <nav>
+    <a href="{% url 'audit:overview' %}">Overview</a>
+    {% if user.is_auditor %}<a href="{% url 'audit:queue' %}">Review queue</a>{% endif %}
+    <a href="{% url 'audit:batches' %}">Batches</a>
+    {% if user.is_administrator %}
+      <a href="{% url 'audit:model' %}">Model performance</a>
+      <a href="{% url 'audit:feedback' %}">Feedback loop</a>
+      <a href="{% url 'admin:accounts_user_changelist' %}">Users</a>
+      <a href="{% url 'admin:activity_activitylog_changelist' %}">Activity log</a>
+    {% endif %}
+  </nav>
+  <div class="who">
+    <a href="{% url 'account_change_password' %}" title="Change password">{{ user.username }}</a> · {{ user.role }}
+    <form method="post" action="{% url 'account_logout' %}">{% csrf_token %}<button class="link">Sign out</button></form>
+  </div>
+  {% endif %}
+</header>
+<main>
+  {% if messages %}<ul class="messages">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>{% endif %}
+  {% block body %}{% block content %}{% endblock %}{% endblock %}
+</main>
+{% block charts %}{% endblock %}
+{% block extra_body %}{% endblock %}
+</body>
+</html>

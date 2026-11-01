@@ -47,8 +47,9 @@ reasoning for choosing LoRA/PEFT in the first place).
 
 ## Deployment / demonstration environment
 
-*(Not yet deployed.)* Recommended: Streamlit on the local machine behind a Cloudflare Tunnel
-(`docs/hosting_guide.md` option A, GitHub #32). Until it is deployed and tested, describe
+*(Web process not yet deployed.)* Since 26 Oct the Django application (branch `django`) uses
+a hosted database and job queue (below); the web process runs on the local machine, and the
+recommendation is to put it behind a Cloudflare Tunnel (`docs/hosting_guide.md`, GitHub #32). Until it is deployed and tested, describe
 the system as a local prototype; `research_writing.txt` line 994 forbids claiming public
 availability.
 
@@ -71,6 +72,9 @@ tuned pipeline without narratives audited 900 claims in 98 s (TC-031).
 | WHO ICD-11 API | Code definition/inclusion/exclusion lookup (IR-01) | **Self-hosted**, not WHO's cloud API — `whoicd/icd-api` Docker image, run via `docker-compose.yml` at repo root. No OAuth2 credentials needed for local deployment (that's cloud-API-only). `acceptLicense=true` and `saveAnalytics` are container startup env vars, not per-request config. |
 | Hugging Face / OpenAI | LLM narrative generation (IR-02) | Provider choice: see `config/config.yaml` `llm_provider` |
 | Google Drive | Data/model/artifact persistence (DR-05) | See `implementation_roadmap.md` Section 3 for folder layout |
+| Neon (PostgreSQL 18.6) | Operational database of the Django application (IR-04) | Free tier, project `hidden-term-38223696`, branch `production`, AWS us-east-2. Pooled URL for the app and workers, direct URL for migrations; both in `.env` from `neon deploy`. About 0.3 s per query from the workstation. |
+| Upstash (Redis 8.4) | Job queue for the CPU and GPU workers (IR-08) | Free tier, TLS (`rediss://`), certificate verified. An idle Celery worker keeps polling, so stop workers when not processing. |
+| Google (OpenID Connect) | Sign-in for linked accounts (IR-07) | OAuth client in Google Cloud Console; redirect URIs for each address the app is opened at. |
 
 ### Note: the ICD-11 container and Colab don't share a network
 

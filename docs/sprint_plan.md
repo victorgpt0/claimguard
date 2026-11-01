@@ -106,6 +106,10 @@ Started early on 17 Oct. Status on 19 Oct below.
 - [ ] Researcher scores 50 random reports on the five-criterion Likert rubric (single-rater; no Krippendorff's alpha).
 - [ ] SHAP coherence check on 100 flagged claims.
 - [ ] Project deployed online and the tested setup recorded in `docs/environment.md`.
+- [x] Django platform, decided 25 Oct (`docs/platform_plan.md`; reverses the 12 Oct descoping of sign-in and roles), built on branch `django` alongside phase 0: accounts, roles and Google sign-in (#62, #61), review pages (#63), upload with validation and jobs on CPU and GPU queues (#57, #58), hosted Neon PostgreSQL and Upstash Redis (26 Oct), batch summary with Markdown and CSV downloads (#59), user management and activity log (#56). TC-038 to TC-044.
+- [x] Documentation of the platform (#60, 26 Oct): Chapter 4 diagrams in `docs/diagrams/`, paste-ready Chapter 3 and 4 text in `compare/changes.txt` section D, Chapter 5 draft, test plan, README, hosting guide.
+- [ ] Colab GPU worker run once end to end (`notebooks/05_gpu_worker.ipynb`; needs the branch pushed).
+- [ ] Supervisor agreement to the change of stack; then merge `django` into `dev`.
 
 ## Final
 
