@@ -73,7 +73,7 @@ docs/diagrams/               # Chapter 4 diagrams for the Django platform (Plant
 
 3. **WHO ICD-11 API (self-hosted, only needed to refresh the cache):**
    ```bash
-   docker compose up -d icd11-api
+   docker compose --profile icd11 up -d icd11-api
    curl http://localhost:8081/icd/release/11/2026-01/mms  # sanity check it's up
    .venv/bin/python -m src.icd11.refresh_cache --codes-file data/processed/icd11_codes_used.txt \
        --cache-path artifacts/icd11_cache.json
