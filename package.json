@@ -9,13 +9,16 @@
     "@tailwindcss/cli": "^4.3.3",
     "@tailwindcss/forms": "^0.5.11",
     "alpinejs": "^3.17.5",
-    "tailwindcss": "^4.3.3"
+    "tailwindcss": "^4.3.3",
+    "vega": "5.30.0",
+    "vega-embed": "6.26.0",
+    "vega-lite": "5.21.0"
   },
   "private": true,
   "scripts": {
     "build:css": "tailwindcss -i web/static/src/app.css -o web/static/css/app.css --minify",
     "watch:css": "tailwindcss -i web/static/src/app.css -o web/static/css/app.css --watch --minify",
-    "vendor": "mkdir -p web/static/vendor && cp node_modules/alpinejs/dist/cdn.min.js web/static/vendor/alpine.min.js && cp node_modules/@alpinejs/collapse/dist/cdn.min.js web/static/vendor/alpine-collapse.min.js && cp node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2 web/static/vendor/",
+    "vendor": "mkdir -p web/static/vendor && cp node_modules/alpinejs/dist/cdn.min.js web/static/vendor/alpine.min.js && cp node_modules/@alpinejs/collapse/dist/cdn.min.js web/static/vendor/alpine-collapse.min.js && cp node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2 web/static/vendor/ && cp node_modules/vega/build/vega.min.js node_modules/vega-lite/build/vega-lite.min.js node_modules/vega-embed/build/vega-embed.min.js web/static/vendor/",
     "build": "npm run vendor && npm run build:css"
   }
 }

@@ -14,12 +14,22 @@ def _spec(values: list[dict], **spec) -> dict:
             "config": {"view": {"stroke": None}, "axis": {"labelLimit": 220}}, **spec}
 
 
-def donut(counts: dict[str, int], field: str) -> dict:
-    values = [{field: k, "reports": v} for k, v in counts.items()]
-    return _spec(values, height=220, mark={"type": "arc", "innerRadius": 50},
+def token(name: str) -> str:
+    """A colour named by its design token; static/js/charts.js swaps in the token's value for
+    the current theme, so a category keeps its meaning (and contrast) in light and dark."""
+    return f"token(--{name})"
+
+
+def donut(segments: list[dict], field: str = "label") -> dict:
+    """segments: [{"label", "reports", "color" (a token name)}]. Colours are fixed per category,
+    not taken from the palette by order, and the page lists the same segments with counts, so
+    the chart never relies on colour alone."""
+    values = [{field: s["label"], "reports": s["reports"]} for s in segments if s["reports"]]
+    scale = {"domain": [s["label"] for s in segments], "range": [token(s["color"]) for s in segments]}
+    return _spec(values, height=200, mark={"type": "arc", "innerRadius": 62, "cornerRadius": 4, "padAngle": 0.02},
                  encoding={"theta": {"field": "reports", "type": "quantitative"},
-                           "color": {"field": field, "type": "nominal", "title": None},
-                           "tooltip": [{"field": field}, {"field": "reports"}]})
+                           "color": {"field": field, "type": "nominal", "scale": scale, "legend": None},
+                           "tooltip": [{"field": field, "title": "Category"}, {"field": "reports", "title": "Reports"}]})
 
 
 def horizontal_bars(values: list[dict], y: str, x: str, x_title: str, tooltip: list | None = None,
@@ -41,7 +51,9 @@ def anomaly_histogram(values: list[dict]) -> dict:
     return _spec(values, height=220, mark="bar", encoding={
         "x": {"field": "anomaly_score", "type": "quantitative", "bin": {"maxbins": 20}, "title": "Anomaly score"},
         "y": {"aggregate": "count", "type": "quantitative", "title": "Claims"},
-        "color": {"field": "verdict", "type": "nominal", "title": "Verdict"},
+        "color": {"field": "verdict", "type": "nominal", "title": "Verdict", "legend": {"orient": "top"},
+                  "scale": {"domain": ["inconsistent", "consistent", "none"],
+                            "range": [token("red"), token("sky"), token("faint")]}},
         "tooltip": [{"aggregate": "count", "type": "quantitative", "title": "claims"}]})
 
 

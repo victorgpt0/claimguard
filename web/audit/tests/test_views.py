@@ -33,6 +33,15 @@ def test_overview_statistics(auditor, reports, pipeline_files):
     page = auditor.get(reverse("audit:overview")).content.decode()
     assert "Flagged claims" in page and "KES 60,000" in page and "1 with narrative" in page
     assert 'id="chart-status"' in page  # chart data via json_script
+    # every chart category is named beside its count, not shown by colour alone
+    assert "Approved (flag confirmed)" in page and "Rejected (false positive)" in page and "Next in the queue" in page
+
+
+def test_overview_empty_state_says_what_to_do(auditor, admin, db):
+    page = auditor.get(reverse("audit:overview")).content.decode()
+    assert "No audit reports yet" in page and "Upload a batch to start" in page
+    assert "chart-status" not in page and "chart-verdicts" not in page  # no report charts without reports
+    assert "A Fraud Auditor uploads batches" in admin.get(reverse("audit:overview")).content.decode()
 
 
 def test_queue_orders_by_score_and_filters_by_lane(auditor, reports, pipeline_files):

@@ -38,31 +38,76 @@ def _config_or_none(request):
 
 # --- Overview (both roles) --------------------------------------------------------------------
 
+# KPI tones are whole class names so Tailwind finds them here. Each category keeps one colour (a design token) wherever it appears, and is always named
+# beside its count, so no chart relies on colour alone.
+STATUS_SEGMENTS = [("pending", "Pending", "sun"), ("approved", "Approved (flag confirmed)", "red"),
+                   ("rejected", "Rejected (false positive)", "green"), ("escalated", "Escalated", "violet")]
+VERDICT_SEGMENTS = [("inconsistent", "Inconsistent", "red"), ("consistent", "Consistent", "sky"),
+                    ("none", "No verdict", "faint")]
+
+
+def _segments(counts: dict, spec: list[tuple]) -> list[dict]:
+    total = sum(counts.values()) or 1
+    return [{"key": key, "label": label, "color": color, "reports": counts.get(key, 0),
+             "pct": f"{counts.get(key, 0) / total:.0%}"} for key, label, color in spec]
+
+
+def _stages(summary: dict) -> list[dict]:
+    """The pipeline funnel as rows: each stage's count and its share of the claims screened."""
+    claims = summary.get("claims") or 0
+    rows = [("Screened", "claims in the batch", summary.get("claims"), "line-strong"),
+            ("Flagged at stage 1", "anomaly detectors and text screen", summary.get("flagged_stage1"), "sun"),
+            ("Inconsistent", "classifier: notes contradict the code", summary.get("inconsistent"), "accent"),
+            ("Explained", "LLM narrative written", summary.get("narratives"), "sky")]
+    stages = []
+    for label, detail, n, color in rows:
+        if n is None:
+            continue
+        share = n / claims if claims else 0
+        stages.append({"label": label, "detail": detail, "claims": f"{n:,}", "color": color,
+                       "pct": f"{share:.1%}" if claims else "",
+                       # the bar keeps a visible sliver for tiny but non-zero stages
+                       "width": f"{max(share * 100, 1.5 if n else 0):.1f}"})
+    return stages
+
+
 @any_role_required
 def overview(request):
     reports = AuditReport.objects.select_related("claim", "verdict")
     total = reports.count()
     context = {"total": total}
+    charts_ = {}
     if total:
         by_status = dict(reports.values_list("status").annotate(n=Count("id")))
-        inconsistent = reports.filter(verdict__verdict=ClassifierVerdict.Verdict.INCONSISTENT)
-        reviewed = total - by_status.get("pending", 0)
-        context["tiles"] = [
-            ("Flagged claims", total, ""),
-            ("Pending review", by_status.get("pending", 0), ""),
-            ("Reviewed", reviewed, f"{reviewed / total:.0%} of reports"),
-            ("Inconsistent verdicts", inconsistent.count(),
-             f"{inconsistent.exclude(llm_narrative=None).count()} with narrative"),
-            ("Amount under audit", kes(reports.aggregate(s=Sum("claim__claim_amount"))["s"]), ""),
-        ]
         verdicts = Counter(r.verdict.verdict if r.verdict else "none" for r in reports)
+        inconsistent = reports.filter(verdict__verdict=ClassifierVerdict.Verdict.INCONSISTENT)
+        pending = by_status.get("pending", 0)
+        reviewed = total - pending
+        context.update(
+            reviewed_share=reviewed / total,
+            kpis=[
+                {"label": "Flagged claims", "value": f"{total:,}", "icon": "flag", "tone": "bg-accent-soft text-accent",
+                 "note": f"{kes(reports.aggregate(s=Sum('claim__claim_amount'))['s'])} under audit"},
+                {"label": "Pending review", "value": f"{pending:,}", "icon": "inbox", "tone": "bg-warn-soft text-warn",
+                 "note": f"{reviewed / total:.0%} of reports reviewed", "progress": reviewed / total},
+                {"label": "Inconsistent verdicts", "value": f"{inconsistent.count():,}", "icon": "file-exclamation-point",
+                 "tone": "bg-danger-soft text-danger", "note": f"{inconsistent.exclude(llm_narrative=None).count()} with narrative"},
+                {"label": "Flags confirmed", "value": f"{by_status.get('approved', 0):,}", "icon": "badge-check",
+                 "tone": "bg-sky-soft text-sky", "note": f"{by_status.get('rejected', 0)} false positives, "
+                                        f"{by_status.get('escalated', 0)} escalated"},
+            ],
+            status_segments=_segments(by_status, STATUS_SEGMENTS),
+            verdict_segments=_segments(verdicts, VERDICT_SEGMENTS),
+        )
+        if request.user.is_auditor:
+            context["next_up"] = _pending(None, "score")[:5]
         providers = (reports.values("claim__provider_id")
                      .annotate(claims=Count("id"), amount=Sum("claim__claim_amount")).order_by("-claims")[:10])
         codes = (reports.values("claim__icd11_code")
                  .annotate(claims=Count("id"), amount=Sum("claim__claim_amount")).order_by("-amount")[:10])
-        context["charts"] = {
-            "status": charts.donut({s: by_status.get(s, 0) for s in ["pending", *DECISIONS]}, "status"),
-            "verdicts": charts.donut(dict(verdicts), "verdict"),
+        charts_ = {
+            "status": charts.donut(context["status_segments"]),
+            "verdicts": charts.donut(context["verdict_segments"]),
             "scores": charts.anomaly_histogram([
                 {"anomaly_score": r.claim.anomaly_score, "verdict": r.verdict.verdict if r.verdict else "none"}
                 for r in reports if r.claim.anomaly_score is not None]),
@@ -80,14 +125,15 @@ def overview(request):
         run = services.latest_pipeline_run()
         if run:
             context["run"] = run
-            context["charts"] = {**context.get("charts", {}), "funnel": charts.funnel(run["summary"])}
+            context["stages"] = _stages(run.get("summary") or {})
             by_typology = (run.get("evaluation") or {}).get("flagged_by_typology")
             if by_typology:
-                context["charts"]["typology"] = charts.share_by_typology(
+                charts_["typology"] = charts.share_by_typology(
                     [{"typology": services.TYPOLOGY_NAMES.get(t, t), "share": v["sum"] / v["size"],
                       "flagged": v["sum"], "claims": v["size"]} for t, v in by_typology.items()],
                     "Share flagged at stage 1 (ground truth)")
-    context["chart_specs"] = {f"chart-{name}": spec for name, spec in context.get("charts", {}).items()}
+    context["charts"] = charts_
+    context["chart_specs"] = {f"chart-{name}": spec for name, spec in charts_.items()}
     return render(request, "audit/overview.html", context)
 
 
