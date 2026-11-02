@@ -1,5 +1,6 @@
 """Accounts (#55, #56, #61 on Django): roles, the last-Administrator rule, no deletion, sign-in
-pages, the activity log, legacy password import and Google sign-in restricted to linked users."""
+pages, the activity log, legacy password import and Google sign-in restricted to linked or
+self-connected users."""
 import hashlib
 import os
 
@@ -96,6 +97,43 @@ def test_google_sign_in_only_for_a_linked_user(rf, make_user, settings):
     entry = ActivityLog.objects.get()
     assert (entry.action, entry.detail, entry.user) == ("google_sign_in_refused", "stranger@gmail.com", None)
     assert settings.SOCIALACCOUNT_EMAIL_AUTHENTICATION and settings.SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT
+
+
+def test_a_signed_in_user_connects_their_own_google_account(rf, make_user):
+    """Self-service linking: connecting Google while signed in fills a blank Google email,
+    never takes an email another user has, and is logged."""
+    from allauth.socialaccount.models import SocialAccount, SocialLogin
+    from allauth.socialaccount.signals import social_account_added, social_account_removed
+    auditor = make_user()
+    account = SocialAccount.objects.create(user=auditor, provider="google", uid="1",
+                                           extra_data={"email": "Auditor@Gmail.com"})
+    social_account_added.send(sender=SocialLogin, request=rf.get("/"),
+                              sociallogin=SocialLogin(user=auditor, account=account))
+    auditor.refresh_from_db()
+    assert auditor.email == "auditor@gmail.com"
+    other = make_user("second", email="taken@gmail.com")
+    taken = SocialAccount.objects.create(user=make_user("third"), provider="google", uid="2",
+                                         extra_data={"email": "taken@gmail.com"})
+    social_account_added.send(sender=SocialLogin, request=rf.get("/"),
+                              sociallogin=SocialLogin(user=taken.user, account=taken))
+    taken.user.refresh_from_db()
+    assert taken.user.email == "" and other.email == "taken@gmail.com"
+    social_account_removed.send(sender=SocialAccount, request=rf.get("/"), socialaccount=account)
+    details = list(ActivityLog.objects.filter(action="email_linked").order_by("pk").values_list("detail", flat=True))
+    assert details == ["auditor: connected Google auditor@gmail.com", "third: connected Google taken@gmail.com",
+                       "auditor: removed Google auditor@gmail.com"]
+
+
+def test_google_sign_in_page_lists_the_connected_account(make_user):
+    from allauth.socialaccount.models import SocialAccount
+    auditor = make_user()
+    client = Client()
+    client.force_login(auditor)
+    assert b"Connect Google account" in client.get(reverse("socialaccount_connections")).content or \
+        b"not configured" in client.get(reverse("socialaccount_connections")).content
+    SocialAccount.objects.create(user=auditor, provider="google", uid="1", extra_data={"email": "a@gmail.com"})
+    page = client.get(reverse("socialaccount_connections")).content
+    assert b"a@gmail.com" in page and b"Remove" in page
 
 
 def test_an_idle_session_expires_after_30_minutes(make_user):

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load socialaccount lucide %}
 {# Sign-in page. Accounts are created by the Administrator (no sign-up); Google is offered #}
-{# when GOOGLE_CLIENT_ID/SECRET are set, and only accounts linked to a Google email can use it. #}
+{# when GOOGLE_CLIENT_ID/SECRET are set, for users who connected their Google account or whose email the Administrator linked. #}
 {% block head_title %}Sign in{% endblock %}
 {% block shell %}
 <div class="flex min-h-screen items-center justify-center p-4 sm:p-8">
@@ -57,7 +57,7 @@
           {% include "partials/google_logo.html" with size=20 %}
           Sign in with Google
         </button>
-        <p class="mt-2 mb-0 text-center text-xs text-muted">For accounts the Administrator has linked to a Google address.</p>
+        <p class="mt-2 mb-0 text-center text-xs text-muted">First time? Sign in with your password, then connect Google from your account menu.</p>
       </form>
       <div class="my-6 flex items-center gap-3 text-xs text-muted before:flex-1 before:border-t before:border-line after:flex-1 after:border-t after:border-line">or with your username</div>
       {% endif %}{% endfor %}

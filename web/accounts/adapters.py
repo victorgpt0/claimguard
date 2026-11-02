@@ -1,7 +1,9 @@
 """Sign-in rules (NFR-03, #61). Nobody signs themselves up: the Administrator creates accounts.
-Google proves identity only, and a Google account gets in only as the existing, active user
-whose linked email equals its verified email (SOCIALACCOUNT_EMAIL_AUTHENTICATION connects it);
-any other Google account is refused."""
+Google proves identity only. A Google account gets in as an existing, active user in one of
+two ways: the user connected it themselves while signed in with their password (Google
+sign-in page, allauth's "connect" process), or its verified email equals the email the
+Administrator linked to the user (SOCIALACCOUNT_EMAIL_AUTHENTICATION connects it on first
+use). Any other Google account is refused."""
 from __future__ import annotations
 
 from allauth.account.adapter import DefaultAccountAdapter

@@ -85,6 +85,7 @@
                class="absolute right-0 mt-2 w-56 rounded-2xl border border-line bg-surface p-1.5 shadow-card">
             <div class="px-3 py-2 text-xs text-muted">Signed in as <span class="font-medium text-ink">{{ user.username }}</span></div>
             <a class="nav-link" role="menuitem" href="{% url 'account_change_password' %}">{% lucide "key-round" size=16 %} Change password</a>
+            <a class="nav-link" role="menuitem" href="{% url 'socialaccount_connections' %}">{% include "partials/google_logo.html" with size=16 %} Google sign-in</a>
             <form method="post" action="{% url 'account_logout' %}">{% csrf_token %}
               <button class="nav-link w-full" role="menuitem">{% lucide "log-out" size=16 %} Sign out</button></form>
           </div>
