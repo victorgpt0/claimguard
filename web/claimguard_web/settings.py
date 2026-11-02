@@ -34,6 +34,8 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
+    "lucide",  # {% lucide "icon-name" %} renders Lucide SVG icons inline
+    "whitenoise.runserver_nostatic",  # WhiteNoise serves static files under runserver too
     "django.contrib.staticfiles",
     "allauth",
     "allauth.account",
@@ -59,6 +61,11 @@ MIDDLEWARE = [
 # even with DEBUG on); in DEBUG it reads them straight from the app folders, no collectstatic.
 MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
 WHITENOISE_USE_FINDERS = DEBUG
+# In DEBUG the browser must recheck CSS/JS on every load, or edits stay hidden behind its cache.
+if DEBUG:
+    def _revalidate_static(headers, path, url):
+        headers["Cache-Control"] = "no-cache"
+    WHITENOISE_ADD_HEADERS_FUNCTION = _revalidate_static
 
 ROOT_URLCONF = "claimguard_web.urls"
 WSGI_APPLICATION = "claimguard_web.wsgi.application"

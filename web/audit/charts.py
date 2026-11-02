@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections import Counter
 
 SCHEMA = "https://vega.github.io/schema/vega-lite/v5.json"
-RED, BLUE, GREEN = "#d62728", "#1f77b4", "#2ca02c"
+RED, BLUE, GREEN = "#e5484d", "#3aa8f0", "#13914f"  # the design palette (static/src/app.css)
 
 
 def _spec(values: list[dict], **spec) -> dict:

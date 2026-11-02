@@ -26,6 +26,7 @@ web = [
     "dj-database-url>=2.2",
     "gunicorn>=23.0",
     "whitenoise>=6.7",
+    "lucide>=1.1.4",
 ]
 # The pipeline's models. Locally torch comes from the CPU-only index (tool.uv.sources);
 # Colab keeps its preinstalled CUDA build.

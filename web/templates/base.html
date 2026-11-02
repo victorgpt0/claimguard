@@ -1,37 +1,108 @@
-{% load static %}<!doctype html>
+{% load static lucide %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block head_title %}ClaimGuard{% endblock %} · ClaimGuard</title>
+  {# Theme before first paint: the saved choice, else the system setting. #}
+  <script>
+    (function () {
+      var t; try { t = localStorage.getItem("theme"); } catch (e) {}
+      if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
+  <link rel="preload" href="{% static 'vendor/inter-latin-wght-normal.woff2' %}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <script defer src="{% static 'vendor/alpine-collapse.min.js' %}"></script>
+  <script defer src="{% static 'js/theme.js' %}"></script>
+  <script defer src="{% static 'vendor/alpine.min.js' %}"></script>
   {% block extra_head %}{% endblock %}
 </head>
-<body>
-<header class="topbar">
-  <a class="brand" href="{% url 'home' %}">ClaimGuard <span>SHA post-payment fraud audit</span></a>
+<body class="min-h-screen">
+{% block shell %}
+{% with url_name=request.resolver_match.url_name %}
+<div x-data="{ nav: false }" class="min-h-screen lg:flex">
   {% if user.is_authenticated %}
-  <nav>
-    <a href="{% url 'audit:overview' %}">Overview</a>
-    {% if user.is_auditor %}<a href="{% url 'audit:queue' %}">Review queue</a>{% endif %}
-    <a href="{% url 'audit:batches' %}">Batches</a>
-    {% if user.is_administrator %}
-      <a href="{% url 'audit:model' %}">Model performance</a>
-      <a href="{% url 'audit:feedback' %}">Feedback loop</a>
-      <a href="{% url 'admin:accounts_user_changelist' %}">Users</a>
-      <a href="{% url 'admin:activity_activitylog_changelist' %}">Activity log</a>
-    {% endif %}
-  </nav>
-  <div class="who">
-    <a href="{% url 'account_change_password' %}" title="Change password">{{ user.username }}</a> · {{ user.role }}
-    <form method="post" action="{% url 'account_logout' %}">{% csrf_token %}<button class="link">Sign out</button></form>
-  </div>
+  {# Sidebar: fixed on large screens, a drawer on small ones. #}
+  <div x-show="nav" x-cloak x-transition.opacity class="fixed inset-0 z-30 bg-black/40 lg:hidden" @click="nav = false"></div>
+  <aside class="fixed inset-y-0 left-0 z-40 flex w-72 -translate-x-full flex-col border-r border-line bg-surface px-4 py-5 transition-transform duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0"
+         :class="nav && 'translate-x-0'">
+    <div class="mb-6 flex items-center justify-between px-2">
+      <a href="{% url 'home' %}" class="flex items-center gap-2.5 text-ink no-underline">
+        <span class="flex size-9 items-center justify-center rounded-xl bg-primary text-on-primary">{% lucide "shield-check" size=19 %}</span>
+        <span class="leading-tight"><span class="block text-[15px] font-semibold">ClaimGuard</span><span class="block text-xs text-muted">SHA post-payment audit</span></span>
+      </a>
+      <button class="icon-btn size-9 lg:hidden" @click="nav = false" aria-label="Close menu">{% lucide "x" size=18 %}</button>
+    </div>
+
+    <nav class="flex-1 overflow-y-auto" aria-label="Main">
+      <div class="nav-section !mt-0">Audit</div>
+      <a class="nav-link {% if url_name == 'overview' %}active{% endif %}" href="{% url 'audit:overview' %}">{% lucide "layout-dashboard" size=18 %} Overview</a>
+      {% if user.is_auditor %}
+      <a class="nav-link {% if url_name == 'queue' or url_name == 'report' %}active{% endif %}" href="{% url 'audit:queue' %}">{% lucide "inbox" size=18 %} Review queue</a>
+      {% endif %}
+      <a class="nav-link {% if url_name == 'batches' or url_name == 'batch' or url_name == 'upload' %}active{% endif %}" href="{% url 'audit:batches' %}">{% lucide "layers" size=18 %} Batches</a>
+      {% if user.is_administrator %}
+      <div class="nav-section">Models</div>
+      <a class="nav-link {% if url_name == 'model' %}active{% endif %}" href="{% url 'audit:model' %}">{% lucide "gauge" size=18 %} Model performance</a>
+      <a class="nav-link {% if url_name == 'feedback' %}active{% endif %}" href="{% url 'audit:feedback' %}">{% lucide "refresh-ccw" size=18 %} Feedback loop</a>
+      <div class="nav-section">Administration</div>
+      <a class="nav-link" href="{% url 'admin:accounts_user_changelist' %}">{% lucide "users" size=18 %} Users</a>
+      <a class="nav-link" href="{% url 'admin:activity_activitylog_changelist' %}">{% lucide "scroll-text" size=18 %} Activity log</a>
+      {% endif %}
+    </nav>
+
+    {# Role-specific call to action, as in the design's bottom card. #}
+    <div class="mt-4 rounded-2xl border border-line bg-subtle p-4">
+      {% if user.is_auditor %}
+        <div class="mb-1 flex items-center gap-2 text-sm font-semibold">{% lucide "upload" size=16 %} New claims batch</div>
+        <p class="mb-3 text-[13px] leading-snug text-muted">Upload a CSV; every line is checked before anything is stored.</p>
+        <a class="btn-primary w-full" href="{% url 'audit:upload' %}">Upload batch</a>
+      {% else %}
+        <div class="mb-1 flex items-center gap-2 text-sm font-semibold">{% lucide "sparkles" size=16 %} Feedback loop</div>
+        <p class="mb-3 text-[13px] leading-snug text-muted">Auditor decisions retrain the classifier once the trigger is reached.</p>
+        <a class="btn-primary w-full" href="{% url 'audit:feedback' %}">View progress</a>
+      {% endif %}
+    </div>
+  </aside>
   {% endif %}
-</header>
-<main>
-  {% if messages %}<ul class="messages">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>{% endif %}
-  {% block body %}{% block content %}{% endblock %}{% endblock %}
-</main>
+
+  <div class="flex min-w-0 flex-1 flex-col">
+    {% if user.is_authenticated %}
+    <header class="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-surface/85 px-4 py-3 backdrop-blur sm:px-8">
+      <button class="icon-btn lg:hidden" @click="nav = true" aria-label="Open menu">{% lucide "menu" size=18 %}</button>
+      <p class="m-0 hidden truncate text-lg font-semibold tracking-tight sm:block">Welcome back, {{ user.first_name|default:user.username }}</p>
+      <div class="ml-auto flex items-center gap-2">
+        {% include "partials/theme_toggle.html" %}
+        <div x-data="{ open: false }" class="relative" @keydown.escape="open = false">
+          <button class="flex items-center gap-3 rounded-xl px-2 py-1.5 text-left transition hover:bg-hover" @click="open = !open" :aria-expanded="open" aria-haspopup="menu">
+            <span class="flex size-9 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent">{{ user.username|slice:":1"|upper }}</span>
+            <span class="hidden leading-tight sm:block"><span class="block text-sm font-medium">{{ user.get_full_name|default:user.username }}</span><span class="block text-xs text-muted">{{ user.role }}</span></span>
+            <span class="text-muted">{% lucide "chevrons-up-down" size=16 %}</span>
+          </button>
+          <div x-show="open" x-cloak x-transition.origin.top.right @click.outside="open = false" role="menu"
+               class="absolute right-0 mt-2 w-56 rounded-2xl border border-line bg-surface p-1.5 shadow-card">
+            <div class="px-3 py-2 text-xs text-muted">Signed in as <span class="font-medium text-ink">{{ user.username }}</span></div>
+            <a class="nav-link" role="menuitem" href="{% url 'account_change_password' %}">{% lucide "key-round" size=16 %} Change password</a>
+            <form method="post" action="{% url 'account_logout' %}">{% csrf_token %}
+              <button class="nav-link w-full" role="menuitem">{% lucide "log-out" size=16 %} Sign out</button></form>
+          </div>
+        </div>
+      </div>
+    </header>
+    {% else %}
+    <div class="flex justify-end px-4 pt-4">{% include "partials/theme_toggle.html" %}</div>
+    {% endif %}
+
+    <main class="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 sm:px-8 sm:py-8">
+      {% if messages %}<ul class="messages">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>{% endif %}
+      {% block body %}{% block content %}{% endblock %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% endwith %}
+{% endblock shell %}
 {% block charts %}{% endblock %}
 {% block extra_body %}{% endblock %}
 </body>

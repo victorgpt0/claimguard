@@ -11,3 +11,4 @@ web/staticfiles
 **/__pycache__
 .env
 config/config.yaml
+node_modules

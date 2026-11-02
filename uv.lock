@@ -424,6 +424,7 @@ web = [
     { name = "django" },
     { name = "django-allauth", extra = ["socialaccount"] },
     { name = "gunicorn" },
+    { name = "lucide" },
     { name = "psycopg", extra = ["binary"] },
     { name = "whitenoise" },
 ]
@@ -459,6 +460,7 @@ web = [
     { name = "django", specifier = ">=5.2,<5.3" },
     { name = "django-allauth", extras = ["socialaccount"], specifier = ">=65.0" },
     { name = "gunicorn", specifier = ">=23.0" },
+    { name = "lucide", specifier = ">=1.1.4" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
     { name = "whitenoise", specifier = ">=6.7" },
 ]
@@ -1017,6 +1019,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f3/21/3d108d6c9a87142927073fbc3d82d161f2dbfdeb046063a51edb196d1132/llvmlite-0.50.0-cp315-cp315t-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:c7d4e2bbb29a860a6e85e22afdb96696241263942a5b214cac3e4b704e1d3abf", size = 58344488, upload-time = "2026-09-29T18:44:36.859Z" },
     { url = "https://files.pythonhosted.org/packages/6e/de/496d19b7a54acc487266ac7fa39d902cddf24998f5266b3aa499c8eacbd6/llvmlite-0.50.0-cp315-cp315t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:afd7b438c60e0f60c4368ec603bb9f20d938a203b5f59b80bbe50c749b4b2f16", size = 59696591, upload-time = "2026-09-29T18:44:40.642Z" },
     { url = "https://files.pythonhosted.org/packages/93/73/72553170eada174775d9a738c471c7be4ab3dc2c06368beeee89e002345c/llvmlite-0.50.0-cp315-cp315t-win_amd64.whl", hash = "sha256:4da0e8c6e6f144b433672a632f75d6b4da7bd4fdb5c3e9981d6ea6741319aeae", size = 42986722, upload-time = "2026-09-29T18:44:44.491Z" },
+]
+
+[[package]]
+name = "lucide"
+version = "1.1.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fd/47/ee3c40e705747a932b64f56b343464bf11111d758e945223755538be3d17/lucide-1.1.4.tar.gz", hash = "sha256:9386940c57a801d92d62a3805d3d584a9e6ca3a43d54765203d72acf8f4965d4", size = 445501, upload-time = "2026-07-09T13:45:48.377Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ef/3d/a99fbb96be09f7cf6ed1b431c87350676dbb4924f01aa39a25848d7e0145/lucide-1.1.4-py3-none-any.whl", hash = "sha256:c2aa88a2bd7d99fcb56a9cdd4959cdf0c5ecd75f05d7ebbeb41010341639f449", size = 443438, upload-time = "2026-07-09T13:45:46.86Z" },
 ]
 
 [[package]]

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% load socialaccount lucide %}
+{# Sign-in page. Accounts are created by the Administrator (no sign-up); Google is offered #}
+{# when GOOGLE_CLIENT_ID/SECRET are set, and only accounts linked to a Google email can use it. #}
+{% block head_title %}Sign in{% endblock %}
+{% block shell %}
+<div class="flex min-h-screen items-center justify-center p-4 sm:p-8">
+  <div class="absolute top-4 right-4">{% include "partials/theme_toggle.html" %}</div>
+
+  <div class="grid w-full max-w-5xl overflow-hidden rounded-3xl border border-line bg-surface shadow-card lg:grid-cols-[1.05fr_1fr]">
+    {# Brand panel: what the system does, with a small widget in the dashboard's style. #}
+    <aside class="relative hidden flex-col justify-between gap-10 overflow-hidden bg-[#0f1115] p-10 text-white lg:flex">
+      <div class="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full bg-[#f26b1d]/25 blur-3xl"></div>
+      <div class="pointer-events-none absolute -bottom-28 -left-16 size-72 rounded-full bg-[#3aa8f0]/20 blur-3xl"></div>
+
+      <div class="relative flex items-center gap-2.5">
+        <span class="flex size-10 items-center justify-center rounded-xl bg-white text-[#0f1115]">{% lucide "shield-check" size=21 %}</span>
+        <span class="text-lg font-semibold">ClaimGuard</span>
+      </div>
+
+      <div class="relative">
+        <h2 class="mb-3 block text-3xl leading-tight font-semibold tracking-tight">Post-payment fraud audit<br>for SHA claims.</h2>
+        <p class="m-0 max-w-sm text-sm leading-relaxed text-white/65">Every claim is screened; only the suspicious ones reach an auditor, with the evidence and a plain-language explanation.</p>
+      </div>
+
+      <div class="relative rounded-2xl border border-white/10 bg-white/[.04] p-5 backdrop-blur">
+        <div class="mb-4 grid grid-cols-3 gap-3 text-[13px]">
+          <div><span class="mb-1 block size-2 rounded-full bg-[#3aa8f0]"></span><span class="text-white/55">Screen</span><p class="m-0 font-medium">Billing anomalies</p></div>
+          <div><span class="mb-1 block size-2 rounded-full bg-[#f26b1d]"></span><span class="text-white/55">Classify</span><p class="m-0 font-medium">Notes vs ICD-11</p></div>
+          <div><span class="mb-1 block size-2 rounded-full bg-[#f4c331]"></span><span class="text-white/55">Explain</span><p class="m-0 font-medium">Audit narrative</p></div>
+        </div>
+        <svg viewBox="0 0 320 80" class="h-auto w-full" aria-hidden="true">
+          <defs><linearGradient id="login-area" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#f26b1d" stop-opacity=".45"/><stop offset="1" stop-color="#f26b1d" stop-opacity="0"/></linearGradient></defs>
+          <path d="M0 70 C40 66 60 58 95 55 S150 40 185 42 S240 20 270 16 S305 8 320 6 L320 80 L0 80 Z" fill="url(#login-area)"/>
+          <path d="M0 70 C40 66 60 58 95 55 S150 40 185 42 S240 20 270 16 S305 8 320 6" fill="none" stroke="#f26b1d" stroke-width="2.5"/>
+          <circle cx="270" cy="16" r="5" fill="#f26b1d" stroke="#0f1115" stroke-width="2.5"/>
+        </svg>
+      </div>
+    </aside>
+
+    <section class="flex flex-col justify-center p-7 sm:p-12">
+      <div class="mb-8 flex items-center gap-2.5 lg:hidden">
+        <span class="flex size-9 items-center justify-center rounded-xl bg-primary text-on-primary">{% lucide "shield-check" size=19 %}</span>
+        <span class="text-lg font-semibold">ClaimGuard</span>
+      </div>
+      <h1 class="mb-1 text-[1.75rem]">Sign in</h1>
+      <p class="mb-7 text-sm text-muted">Use the account your Administrator created for you.</p>
+
+      {% if messages %}<ul class="messages">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>{% endif %}
+
+      {% get_providers as socialaccount_providers %}
+      {% for provider in socialaccount_providers %}{% if provider.id == "google" %}
+      <form method="post" action="{% provider_login_url 'google' process='login' %}">
+        {% csrf_token %}
+        {% if redirect_field_value %}<input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}">{% endif %}
+        <button type="submit" class="flex w-full items-center justify-center gap-3 rounded-xl border border-line-strong bg-surface px-4 py-3 text-[15px] font-medium text-ink transition hover:bg-hover active:scale-[.99]">
+          {% include "partials/google_logo.html" with size=20 %}
+          Sign in with Google
+        </button>
+        <p class="mt-2 mb-0 text-center text-xs text-muted">For accounts the Administrator has linked to a Google address.</p>
+      </form>
+      <div class="my-6 flex items-center gap-3 text-xs text-muted before:flex-1 before:border-t before:border-line after:flex-1 after:border-t after:border-line">or with your username</div>
+      {% endif %}{% endfor %}
+
+      <form method="post" action="{% url 'account_login' %}" class="flex flex-col">
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="mb-4 flex items-start gap-2 rounded-xl border border-danger/20 bg-danger-soft px-4 py-3 text-sm text-danger" role="alert">{% lucide "circle-alert" size=18 %}<span>{% for e in form.non_field_errors %}{{ e }}{% endfor %}</span></div>{% endif %}
+
+        <label for="{{ form.login.id_for_label }}" class="mb-1.5 text-sm font-medium">Username</label>
+        <div class="relative mb-4">
+          <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-faint">{% lucide "user-round" size=17 %}</span>
+          <input type="text" name="login" id="{{ form.login.id_for_label }}" value="{{ form.login.value|default_if_none:'' }}" autocomplete="username" maxlength="150" required autofocus class="w-full py-2.5 pl-10">
+        </div>
+        {% for e in form.login.errors %}<p class="-mt-3 mb-3 text-sm text-danger">{{ e }}</p>{% endfor %}
+
+        <label for="{{ form.password.id_for_label }}" class="mb-1.5 text-sm font-medium">Password</label>
+        <div class="relative mb-4" x-data="{ show: false }">
+          <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-faint">{% lucide "lock-keyhole" size=17 %}</span>
+          <input :type="show ? 'text' : 'password'" type="password" name="password" id="{{ form.password.id_for_label }}" autocomplete="current-password" required class="w-full py-2.5 pr-11 pl-10">
+          <button type="button" class="absolute inset-y-0 right-1.5 my-auto flex size-8 items-center justify-center rounded-lg text-faint hover:text-ink" @click="show = !show" :aria-label="show ? 'Hide password' : 'Show password'">
+            <span x-show="!show">{% lucide "eye" size=17 %}</span><span x-show="show" x-cloak>{% lucide "eye-off" size=17 %}</span>
+          </button>
+        </div>
+        {% for e in form.password.errors %}<p class="-mt-3 mb-3 text-sm text-danger">{{ e }}</p>{% endfor %}
+
+        <div class="mb-6 flex flex-wrap items-center justify-between gap-2">
+          <label class="inline-flex cursor-pointer items-center gap-2.5 text-sm">
+            <input type="checkbox" name="remember" class="size-4" {% if form.remember.value %}checked{% endif %}> Remember me
+          </label>
+          <span class="text-xs text-muted">Forgot password? Ask your Administrator.</span>
+        </div>
+        {{ redirect_field }}
+        <button type="submit" class="btn-primary w-full py-3 text-[15px]">Sign in {% lucide "arrow-right" size=17 %}</button>
+      </form>
+    </section>
+  </div>
+</div>
+{% endblock %}
