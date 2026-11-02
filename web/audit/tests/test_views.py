@@ -52,6 +52,16 @@ def test_report_shows_the_six_panels(auditor, reports, pipeline_files):
     assert "No narrative: the classifier found the notes consistent" in page
 
 
+def test_the_verdict_score_is_not_presented_as_confidence(auditor, reports, pipeline_files):
+    """The classifier's softmax output is uncalibrated (Course Sprint III brief): the report
+    and the CSV export call it a model score, never confidence or a percentage."""
+    page = auditor.get(reverse("audit:report", args=[reports[0].pk])).content.decode()
+    assert "model score 0.90" in page and "not a calibrated probability" in page
+    assert "confidence" not in page.lower() and "90%" not in page
+    header = auditor.get(reverse("audit:batch_reports", args=[reports[0].claim.batch_id])).content.decode().splitlines()[0]
+    assert "classifier_score" in header.split(",") and "confidence" not in header
+
+
 def test_approving_records_reviewer_activity_and_feedback(auditor, reports, pipeline_files):
     response = auditor.post(reverse("audit:decide", args=[reports[0].pk]), {"decision": "approved", "lane": ""})
     report = AuditReport.objects.get(pk=reports[0].pk)

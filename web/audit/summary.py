@@ -19,7 +19,7 @@ from .models import AuditReport, Batch, Claim, ClassifierVerdict
 DECISIONS = ["approved", "rejected", "escalated"]
 TOP = 5
 CSV_COLUMNS = ["report_id", "claim_id", "provider_id", "icd11_code", "claim_amount", "anomaly_score",
-               "flag_sources", "lane", "verdict", "confidence", "model_version", "shap_top3",
+               "flag_sources", "lane", "verdict", "classifier_score", "model_version", "shap_top3",
                "narrative", "decision", "reviewer", "reviewed_at"]
 
 

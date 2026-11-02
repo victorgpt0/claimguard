@@ -36,8 +36,8 @@
     {% if shap_chart %}<div data-chart="chart-shap"></div>{% endif %}</section>
   <section class="card"><h2>5 · Stage 2: classifier verdict <span class="tag">output</span></h2>
     <p class="caption">Do the notes (2) support the billed code (3)?</p>
-    {% if report.verdict %}<p class="verdict {{ report.verdict.verdict }}"><strong>{{ report.verdict.verdict }}</strong> · {% widthratio report.verdict.confidence 1 100 %}% confidence</p>
-      <p class="caption">Model: {{ report.verdict.model_version }}</p>
+    {% if report.verdict %}<p class="verdict {{ report.verdict.verdict }}"><strong>{{ report.verdict.verdict|capfirst }}</strong> · model score {{ report.verdict.confidence|floatformat:2 }}</p>
+      <p class="caption">The model score is the classifier's output for this verdict, from 0.50 to 1.00: higher means the model leans more strongly towards it. It is not a calibrated probability that the verdict is correct, so read it as a ranking signal and judge the claim on panels 1–4. Model: {{ report.verdict.model_version }}</p>
     {% else %}<p class="verdict">No verdict</p>{% endif %}</section>
 </div>
 

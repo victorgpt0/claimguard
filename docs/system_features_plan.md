@@ -127,7 +127,7 @@ report without signing in.
   - review progress: pending, approved, rejected, escalated, and by whom;
   - the classifier version and thresholds used (from the run log).
 - Download the summary as **Markdown** (a readable report) and the batch's reports as **CSV**
-  (claim, lane, verdict, confidence, SHAP top 3, decision, reviewer, time).
+  (claim, lane, verdict, classifier score, SHAP top 3, decision, reviewer, time).
 - Built from SQLite plus the run log; nothing is recomputed.
 - Tests: summary counts on a seeded database; both downloads produce the expected
   columns and sections.

@@ -73,6 +73,8 @@ class ClassifierVerdict(models.Model):
 
     claim = models.ForeignKey(Claim, on_delete=models.PROTECT, related_name="verdicts")
     verdict = models.CharField(max_length=20, choices=Verdict.choices)
+    # The classifier's softmax output for the predicted class (0.5-1.0). Not calibrated, so
+    # the interface and exports call it "model score", never confidence or a probability.
     confidence = models.FloatField()
     model_version = models.CharField(max_length=100)
 
