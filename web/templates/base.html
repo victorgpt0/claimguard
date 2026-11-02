@@ -20,6 +20,7 @@
   {% block extra_head %}{% endblock %}
 </head>
 <body class="min-h-screen">
+<a class="skip-link" href="#main">Skip to content</a>
 {% block shell %}
 {% with url_name=request.resolver_match.url_name %}
 <div x-data="{ nav: false }" class="min-h-screen lg:flex">
@@ -96,8 +97,8 @@
     <div class="flex justify-end px-4 pt-4">{% include "partials/theme_toggle.html" %}</div>
     {% endif %}
 
-    <main class="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 sm:px-8 sm:py-8">
-      {% if messages %}<ul class="messages">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>{% endif %}
+    <main id="main" tabindex="-1" class="outline-none mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 sm:px-8 sm:py-8">
+      {% if messages %}<ul class="messages" role="status">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>{% endif %}
       {% block body %}{% block content %}{% endblock %}{% endblock %}
     </main>
   </div>

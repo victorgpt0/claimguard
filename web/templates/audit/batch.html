@@ -1,18 +1,22 @@
 {% extends "base.html" %}
+{% load static lucide %}
 {% block head_title %}Batch #{{ batch.pk }}{% endblock %}
-{% block extra_head %}<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>{% endblock %}
+{% block extra_head %}<script src="{% static 'vendor/htmx.min.js' %}" defer></script>{% endblock %}
 {% block content %}
-<p><a href="{% url 'audit:batches' %}">← Batches</a></p>
-<h1>Batch #{{ batch.pk }} · {{ batch.name }} <span class="badge status-{{ batch.status }}">{{ batch.get_status_display }}</span></h1>
-<div class="tiles">
-  <div class="tile"><span class="label">Claims</span><span class="value">{{ batch.claims_count }}</span></div>
-  <div class="tile"><span class="label">Reports</span><span class="value">{{ reports }}</span>{% if reports and user.is_auditor %}<span class="note"><a href="{% url 'audit:queue' %}">Review queue</a></span>{% endif %}</div>
-  <div class="tile"><span class="label">Uploaded</span><span class="value small">{{ batch.uploaded_at|date:"Y-m-d H:i" }}</span><span class="note">by {{ batch.uploaded_by.username|default:"—" }}</span></div>
+<a class="back-link" href="{% url 'audit:batches' %}">{% lucide "arrow-left" size=15 %} Batches</a>
+<div class="page-head">
+  <div><h1>Batch #{{ batch.pk }} · {{ batch.name }} <span class="badge status-{{ batch.status }}">{{ batch.get_status_display|capfirst }}</span></h1>
+    <p>Uploaded {{ batch.uploaded_at|date:"Y-m-d H:i" }} by {{ batch.uploaded_by.username|default:"—" }}.</p></div>
+  {% if reports and user.is_auditor %}<a class="btn-primary" href="{% url 'audit:queue' %}">{% lucide "inbox" size=16 %} Review queue</a>{% endif %}
 </div>
-{% if batch.error %}<p class="warning">Last run failed: {{ batch.error }}</p>{% endif %}
+<div class="mb-5 grid gap-4 sm:grid-cols-2">
+  <div class="kpi"><div class="flex items-center justify-between"><span class="kpi-label">Claims</span><span class="kpi-icon bg-sky-soft text-sky" aria-hidden="true">{% lucide "file-text" size=18 %}</span></div><span class="kpi-value">{{ batch.claims_count }}</span></div>
+  <div class="kpi"><div class="flex items-center justify-between"><span class="kpi-label">Reports</span><span class="kpi-icon bg-accent-soft text-accent" aria-hidden="true">{% lucide "flag" size=18 %}</span></div><span class="kpi-value">{{ reports }}</span></div>
+</div>
+{% if batch.error %}<p class="notice notice-danger" role="alert">{% lucide "circle-alert" size=16 %}<span>Last run failed: {{ batch.error }}</span></p>{% endif %}
 
 {% if job %}<section class="card"><h2>Processing</h2>
-  <div {% if job.active %}hx-get="{% url 'audit:job_progress' job.pk %}" hx-trigger="every 2s" hx-swap="innerHTML"{% endif %}>
+  <div aria-live="polite" {% if job.active %}hx-get="{% url 'audit:job_progress' job.pk %}" hx-trigger="every 2s" hx-swap="innerHTML"{% endif %}>
     {% include "audit/job_progress.html" %}
   </div></section>{% endif %}
 
@@ -24,19 +28,19 @@
     <label class="choice"><input type="radio" name="queue" value="{{ value }}" {% if forloop.first %}checked{% endif %}>
       {{ label }} — {% if value in workers %}<span class="online">worker online</span>{% else %}<span class="offline">no worker online</span>{% endif %}</label>
   {% endfor %}
-  <p><button>Start processing</button></p>
+  <button type="submit" class="btn-primary mt-2">{% lucide "play" size=16 %} Start processing</button>
 </form>
 {% endif %}
 {% if s %}
 <section class="card">
-  <h2>Batch summary</h2>
-  <p><a class="button" href="{% url 'audit:batch_summary' batch.pk %}">Download summary (Markdown)</a>
-     <a class="button" href="{% url 'audit:batch_reports' batch.pk %}">Download reports (CSV)</a></p>
+  <div class="card-head"><div><h2>Batch summary</h2><p>What the pipeline found in this batch and how review is going.</p></div>
+    <div class="flex flex-wrap gap-2"><a class="btn" href="{% url 'audit:batch_summary' batch.pk %}">{% lucide "file-down" size=16 %} Download summary (Markdown)</a>
+     <a class="btn" href="{% url 'audit:batch_reports' batch.pk %}">{% lucide "sheet" size=16 %} Download reports (CSV)</a></div></div>
   <div class="tiles">
-    <div class="tile"><span class="label">Flagged at stage 1</span><span class="value">{{ s.flagged }}</span><span class="note">of {{ s.claims }} claims</span></div>
-    <div class="tile"><span class="label">Queued for review</span><span class="value">{{ s.queued }}</span><span class="note">{{ s.cleared }} cleared by the classifier</span></div>
-    <div class="tile"><span class="label">Amount under audit</span><span class="value small">{{ amount_under_audit }}</span><span class="note">of {{ amount_claimed }} claimed</span></div>
-    <div class="tile"><span class="label">Reviewed</span><span class="value">{{ s.reviewed }}</span><span class="note">{{ s.review.pending }} pending</span></div>
+    <div class="tile !shadow-none bg-subtle"><span class="label">Flagged at stage 1</span><span class="value">{{ s.flagged }}</span><span class="note">of {{ s.claims }} claims</span></div>
+    <div class="tile !shadow-none bg-subtle"><span class="label">Queued for review</span><span class="value">{{ s.queued }}</span><span class="note">{{ s.cleared }} cleared by the classifier</span></div>
+    <div class="tile !shadow-none bg-subtle"><span class="label">Amount under audit</span><span class="value small">{{ amount_under_audit }}</span><span class="note">of {{ amount_claimed }} claimed</span></div>
+    <div class="tile !shadow-none bg-subtle"><span class="label">Reviewed</span><span class="value">{{ s.reviewed }}</span><span class="note">{{ s.review.pending }} pending</span></div>
   </div>
   <div class="grid2">
     <div>
@@ -51,7 +55,7 @@
       </table>
     </div>
     <div>
-      <h2>Review progress</h2>
+      <h3 class="mb-2 text-sm font-semibold">Review progress</h3>
       <table class="list">
         <thead><tr><th>Reviewer</th><th class="num">Approved</th><th class="num">Rejected</th><th class="num">Escalated</th></tr></thead>
         <tbody>
@@ -66,11 +70,11 @@
   <section class="card"><h2>Queued claims by provider</h2>
     {% if s.top_providers %}<table class="list"><thead><tr><th>Provider</th><th class="num">Claims</th><th class="num">KES</th></tr></thead>
     <tbody>{% for p in s.top_providers %}<tr><td>{{ p.claim__provider_id }}</td><td class="num">{{ p.claims }}</td><td class="num">{{ p.amount|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table>
-    {% else %}<p class="empty">None queued.</p>{% endif %}</section>
+    {% else %}<p class="caption mb-0">No claims from this batch were queued.</p>{% endif %}</section>
   <section class="card"><h2>Queued claims by ICD-11 code</h2>
     {% if s.top_codes %}<table class="list"><thead><tr><th>Code</th><th class="num">Claims</th><th class="num">KES</th></tr></thead>
     <tbody>{% for c in s.top_codes %}<tr><td>{{ c.claim__icd11_code }}</td><td class="num">{{ c.claims }}</td><td class="num">{{ c.amount|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table>
-    {% else %}<p class="empty">None queued.</p>{% endif %}</section>
+    {% else %}<p class="caption mb-0">No claims from this batch were queued.</p>{% endif %}</section>
 </div>
 <section class="card"><h2>Models and settings</h2>
   <dl class="fields">

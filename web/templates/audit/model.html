@@ -1,15 +1,28 @@
 {% extends "base.html" %}
+{% load lucide %}
 {% block head_title %}Model performance{% endblock %}
 {% block content %}
-<h1>Model performance</h1>
-{% if path and not metrics %}<p class="warning">No classifier checkpoint at {{ path }}.</p>{% endif %}
+<div class="page-head"><div><h1>Model performance</h1><p>How the active consistency classifier scores, and where it misses.</p></div></div>
+{% if path and not metrics %}
+<section class="card"><div class="empty-state">
+  <span class="kpi-icon size-12 bg-warn-soft text-warn">{% lucide "gauge" size=22 %}</span>
+  <h2>No classifier checkpoint</h2>
+  <p>Nothing was found at <code>{{ path }}</code>. Train or copy a checkpoint there (see the README), then reload.</p>
+</div></section>
+{% elif not path %}
+<section class="card"><div class="empty-state">
+  <span class="kpi-icon size-12 bg-warn-soft text-warn">{% lucide "gauge" size=22 %}</span>
+  <h2>Pipeline settings are missing</h2><p>This page reads the checkpoint named in <code>config/config.yaml</code>.</p>
+</div></section>
+{% endif %}
 {% if metrics %}
   <p class="caption">Active checkpoint: {{ record.run_id|default:path.name }} · validation split · epoch {{ metrics.epoch|default:"?" }}. The held-out test metrics are reported once, at the final evaluation.</p>
-  <div class="tiles">
-    <div class="tile"><span class="label">Precision</span><span class="value">{{ metrics.precision|floatformat:3 }}</span></div>
-    <div class="tile"><span class="label">Recall</span><span class="value">{{ metrics.recall|floatformat:3 }}</span><span class="note">NFR-05 floor 0.80</span></div>
-    <div class="tile"><span class="label">F1</span><span class="value">{{ metrics.f1|floatformat:3 }}</span></div>
-    <div class="tile"><span class="label">Caught</span><span class="value">{{ caught }} / {{ metrics.positives }}</span></div>
+  <div class="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="kpi"><span class="kpi-label">Precision</span><span class="kpi-value">{{ metrics.precision|floatformat:3 }}</span><span class="kpi-note">Flags that were right</span></div>
+    <div class="kpi"><span class="kpi-label">Recall</span><span class="kpi-value">{{ metrics.recall|floatformat:3 }}</span>
+      <span class="kpi-note">NFR-05 floor 0.80 · {% if metrics.recall >= 0.8 %}<span class="text-success">met</span>{% else %}<span class="text-danger">not met</span>{% endif %}</span></div>
+    <div class="kpi"><span class="kpi-label">F1</span><span class="kpi-value">{{ metrics.f1|floatformat:3 }}</span><span class="kpi-note">Balance of the two</span></div>
+    <div class="kpi"><span class="kpi-label">Caught</span><span class="kpi-value">{{ caught }} / {{ metrics.positives }}</span><span class="kpi-note">Inconsistent claims found</span></div>
   </div>
   {% if typology_chart %}
   <section class="card"><h2>Flagged by fraud typology</h2>
@@ -17,11 +30,11 @@
     <div data-chart="chart-typology"></div></section>
   <div class="grid2">{% for title, rows in strata %}
     <section class="card"><h2>{{ title }}</h2>
-      <table class="list"><thead><tr><th></th><th class="num">Claims</th><th class="num">Inconsistent</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th></tr></thead>
-      <tbody>{% for name, row in rows.items %}<tr><td>{{ name }}</td><td class="num">{{ row.claims }}</td><td class="num">{{ row.inconsistent }}</td><td class="num">{{ row.precision|floatformat:3 }}</td><td class="num">{{ row.recall|floatformat:3 }}</td><td class="num">{{ row.f1|floatformat:3 }}</td></tr>{% endfor %}</tbody></table>
+      <div class="table-wrap"><table class="list"><thead><tr><th></th><th class="num">Claims</th><th class="num">Inconsistent</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th></tr></thead>
+      <tbody>{% for name, row in rows.items %}<tr><td>{{ name }}</td><td class="num">{{ row.claims }}</td><td class="num">{{ row.inconsistent }}</td><td class="num">{{ row.precision|floatformat:3 }}</td><td class="num">{{ row.recall|floatformat:3 }}</td><td class="num">{{ row.f1|floatformat:3 }}</td></tr>{% endfor %}</tbody></table></div>
       {% if forloop.last and rare_threshold %}<p class="caption">Rare: {{ rare_threshold }}.</p>{% endif %}
     </section>{% endfor %}</div>
-  {% else %}<p class="caption">Run src.classification.evaluate for the stratified breakdown.</p>{% endif %}
+  {% else %}<p class="notice notice-info">{% lucide "info" size=16 %}<span>No stratified breakdown yet: run <code>python -m src.classification.evaluate</code>.</span></p>{% endif %}
 {% endif %}
 {% endblock %}
 {% block charts %}{% if typology_chart %}{{ typology_chart|json_script:"chart-typology" }}{% include "partials_charts.html" %}{% endif %}{% endblock %}

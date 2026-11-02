@@ -1,0 +1,16 @@
+{% extends "admin/base.html" %}
+{% load static %}
+{# The admin keeps Django's own layout, recoloured with ClaimGuard's tokens (static/css/admin.css) #}
+{# and with a way back to the application. Both share the "theme" setting in localStorage. #}
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | ClaimGuard{% endblock %}
+{% block extrastyle %}{{ block.super }}
+<link rel="preload" href="{% static 'vendor/inter-latin-wght-normal.woff2' %}" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{% static 'css/admin.css' %}">{% endblock %}
+{% block branding %}
+<div id="site-name"><a href="{% url 'admin:index' %}"><span class="cg-logo" aria-hidden="true">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+</span>{{ site_header|default:_('Django administration') }}</a></div>
+{% if user.is_anonymous %}{% include "admin/color_theme_toggle.html" %}{% endif %}
+{% endblock %}
+{% block userlinks %}<a href="{% url 'home' %}">← Back to ClaimGuard</a> / {{ block.super }}{% endblock %}
+{% block nav-global %}{% endblock %}

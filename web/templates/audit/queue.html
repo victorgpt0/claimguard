@@ -1,32 +1,61 @@
 {% extends "base.html" %}
+{% load lucide %}
 {% block head_title %}Review queue{% endblock %}
 {% block content %}
-<h1>Review queue <span class="count">{{ pending_count }} pending</span></h1>
-<form method="get" class="filters">
-  <label>Lane
-    <select name="lane" onchange="this.form.submit()">
-      <option value="" {% if not lane %}selected{% endif %}>All</option>
-      <option value="text_inconsistent" {% if lane == "text_inconsistent" %}selected{% endif %}>Text inconsistent ({{ lane_counts.text_inconsistent }})</option>
-      <option value="structural_anomaly" {% if lane == "structural_anomaly" %}selected{% endif %}>Structural anomaly ({{ lane_counts.structural_anomaly }})</option>
-    </select></label>
-  <label>Order
-    <select name="order" onchange="this.form.submit()">
-      <option value="score" {% if order == "score" %}selected{% endif %}>Highest anomaly score</option>
-      <option value="oldest" {% if order == "oldest" %}selected{% endif %}>Oldest first</option>
-    </select></label>
-  <noscript><button>Apply</button></noscript>
-</form>
-<p class="caption">Text inconsistent: the notes do not support the billed code. Structural anomaly: the notes are consistent, but the billing fields look anomalous.</p>
+<div class="page-head">
+  <div>
+    <h1>Review queue <span class="badge">{{ pending_count }} pending</span></h1>
+    <p>Open a report, read its six panels, and record a decision. The next report opens after each one.</p>
+  </div>
+  <form method="get" class="flex flex-wrap items-end gap-3" aria-label="Filter the queue">
+    <label class="flex flex-col gap-1 text-xs font-medium text-muted">Lane
+      <select name="lane" onchange="this.form.submit()">
+        <option value="" {% if not lane %}selected{% endif %}>All lanes</option>
+        <option value="text_inconsistent" {% if lane == "text_inconsistent" %}selected{% endif %}>Text inconsistent ({{ lane_counts.text_inconsistent }})</option>
+        <option value="structural_anomaly" {% if lane == "structural_anomaly" %}selected{% endif %}>Structural anomaly ({{ lane_counts.structural_anomaly }})</option>
+      </select></label>
+    <label class="flex flex-col gap-1 text-xs font-medium text-muted">Order
+      <select name="order" onchange="this.form.submit()">
+        <option value="score" {% if order == "score" %}selected{% endif %}>Highest anomaly score</option>
+        <option value="oldest" {% if order == "oldest" %}selected{% endif %}>Oldest first</option>
+      </select></label>
+    <noscript><button>Apply</button></noscript>
+  </form>
+</div>
+
+<div class="mb-5 grid gap-4 sm:grid-cols-2">
+  <a href="?lane=text_inconsistent&order={{ order }}" class="kpi no-underline {% if lane == 'text_inconsistent' %}ring-2 ring-ink{% endif %}">
+    <div class="flex items-center justify-between"><span class="badge text_inconsistent">Text inconsistent</span><span class="kpi-value text-2xl">{{ lane_counts.text_inconsistent }}</span></div>
+    <span class="text-[13px] text-muted">The notes do not support the billed ICD-11 code. These come with an LLM narrative.</span>
+  </a>
+  <a href="?lane=structural_anomaly&order={{ order }}" class="kpi no-underline {% if lane == 'structural_anomaly' %}ring-2 ring-ink{% endif %}">
+    <div class="flex items-center justify-between"><span class="badge structural_anomaly">Structural anomaly</span><span class="kpi-value text-2xl">{{ lane_counts.structural_anomaly }}</span></div>
+    <span class="text-[13px] text-muted">The notes are consistent, but the billing fields look anomalous. Check panel 4.</span>
+  </a>
+</div>
+
+<section class="card">
 {% if reports %}
-<table class="list">
-  <thead><tr><th>#</th><th>Lane</th><th>Claim</th><th>Provider</th><th>Code</th><th class="num">Amount (KES)</th><th class="num">Score</th></tr></thead>
-  <tbody>{% for r in reports %}
-    <tr><td><a href="{% url 'audit:report' r.pk %}?lane={{ lane }}&order={{ order }}">#{{ r.pk }}</a></td>
-      <td>{% include "audit/lane_badge.html" with lane=r.lane %}</td>
-      <td>{{ r.claim.claim_ref }}</td><td>{{ r.claim.provider_id }}</td><td>{{ r.claim.icd11_code }}</td>
-      <td class="num">{{ r.claim.claim_amount|floatformat:"0g" }}</td><td class="num">{{ r.claim.anomaly_score|floatformat:3 }}</td></tr>
-  {% endfor %}</tbody>
-</table>
-{% if pending_count > 200 %}<p class="caption">Showing the first 200.</p>{% endif %}
-{% else %}<p class="empty">No pending reports{% if lane %} in this lane{% endif %}.</p>{% endif %}
+  <div class="table-wrap">
+  <table class="list">
+    <caption class="sr-only">Pending reports{% if lane %} in the {{ lane|cut:"_" }} lane{% endif %}, {% if order == "score" %}highest anomaly score first{% else %}oldest first{% endif %}</caption>
+    <thead><tr><th scope="col">Report</th><th scope="col">Lane</th><th scope="col">Claim</th><th scope="col">Provider</th><th scope="col">Code</th><th scope="col" class="num">Amount (KES)</th><th scope="col" class="num">Score</th></tr></thead>
+    <tbody>{% for r in reports %}
+      <tr><td><a href="{% url 'audit:report' r.pk %}?lane={{ lane }}&order={{ order }}">#{{ r.pk }}</a></td>
+        <td>{% include "audit/lane_badge.html" with lane=r.lane %}</td>
+        <td>{{ r.claim.claim_ref }}</td><td>{{ r.claim.provider_id }}</td><td><code>{{ r.claim.icd11_code }}</code></td>
+        <td class="num">{{ r.claim.claim_amount|floatformat:"0g" }}</td><td class="num">{{ r.claim.anomaly_score|floatformat:3 }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  </div>
+  {% if pending_count > 200 %}<p class="caption mt-3 mb-0">Showing the first 200 of {{ pending_count }}.</p>{% endif %}
+{% else %}
+  <div class="empty-state">
+    <span class="kpi-icon size-12 bg-success-soft text-success">{% lucide "circle-check-big" size=22 %}</span>
+    <h2>No pending reports{% if lane %} in this lane{% endif %}</h2>
+    <p>{% if lane %}Every report in this lane has a decision. <a href="{% url 'audit:queue' %}">Show all lanes</a>.{% else %}Every report has a decision. New reports arrive when a batch is processed.{% endif %}</p>
+    {% if not lane %}<a class="btn" href="{% url 'audit:batches' %}">{% lucide "layers" size=16 %} Go to batches</a>{% endif %}
+  </div>
+{% endif %}
+</section>
 {% endblock %}

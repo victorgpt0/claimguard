@@ -126,3 +126,34 @@ def test_overview_funnel_comes_from_the_pool_run_only(auditor, reports, pipeline
                                                         "summary": {**summary, "claims": 3600}}))
     page = auditor.get(reverse("audit:overview")).content.decode()
     assert "batch of 2000 claims" in page and "3600" not in page
+
+
+def test_wrong_role_and_missing_pages_explain_themselves(auditor, settings, db):
+    """Permission-denied and not-found states say what happened and offer a way back."""
+    page = auditor.get(reverse("audit:model"))
+    assert page.status_code == 403 and "This page is not for your role" in page.content.decode()
+    settings.DEBUG = False
+    page = auditor.get("/audit/no-such-page/")
+    assert page.status_code == 404 and "Page not found" in page.content.decode()
+
+
+def test_server_error_page_renders_without_a_request_context():
+    from django.template.loader import render_to_string
+    assert "Something went wrong on our side" in render_to_string("500.html")
+
+
+def test_report_decision_needs_an_explicit_choice(auditor, reports, pipeline_files):
+    """Error prevention: one required radio group and a single submit, not three instant buttons."""
+    page = auditor.get(reverse("audit:report", args=[reports[0].pk])).content.decode()
+    assert page.count('type="radio" name="decision"') == 3 and "required" in page
+    assert "Record decision" in page and 'href="#main"' in page  # skip link to the content
+
+
+def test_queue_empty_state(auditor, db):
+    page = auditor.get(reverse("audit:queue")).content.decode()
+    assert "No pending reports" in page
+
+
+def test_admin_links_back_to_the_application(admin):
+    page = admin.get("/admin/").content.decode()
+    assert "Back to ClaimGuard" in page and "css/admin.css" in page

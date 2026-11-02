@@ -1,0 +1,4 @@
+{% extends "base.html" %}
+{% block head_title %}Server error{% endblock %}
+{# Rendered without a request context: no user, so no sidebar; nothing here may need the database. #}
+{% block content %}{% include "partials/error_page.html" with code=500 icon="server-crash" tone="bg-danger-soft text-danger" title="Something went wrong on our side" message="The error has been logged. Try again in a moment, and tell your Administrator if it keeps happening." %}{% endblock %}

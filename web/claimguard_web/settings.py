@@ -176,3 +176,15 @@ CLAIMGUARD_CONFIG = Path(os.environ.get("CLAIMGUARD_CONFIG", REPO_ROOT / "config
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SESSION_COOKIE_SECURE = CSRF_COOKIE_SECURE = True
+
+# Errors to the console (and so to the container's logs) whether or not DEBUG is on: Django's
+# default sends request errors only to ADMINS by email when DEBUG is off, which this project
+# does not set, so a server error would otherwise leave no trace.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"plain": {"format": "{asctime} {levelname} {name}: {message}", "style": "{"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "plain"}},
+    "root": {"handlers": ["console"], "level": "WARNING"},
+    "loggers": {"django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False}},
+}

@@ -189,6 +189,26 @@
   .stage-bar { @apply col-span-2 h-2.5 overflow-hidden rounded-full bg-hover; }
   .stage-bar span { @apply block h-full min-w-1 rounded-full; }
 
+  /* Shared page pieces: back link, empty state, table wrapper, notices with icons. */
+  .back-link { @apply mb-3 inline-flex items-center gap-1.5 text-sm text-muted no-underline hover:text-ink; }
+  .empty-state { @apply flex flex-col items-center gap-3 px-4 py-12 text-center; }
+  .empty-state h2 { @apply mb-0 justify-center; }
+  .empty-state p { @apply m-0 max-w-md text-sm text-muted; }
+  .table-wrap { @apply -mx-5 overflow-x-auto px-5; }
+  .table-wrap table.list { @apply table min-w-[560px]; }
+  .notice { @apply mb-4 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm; }
+  .notice svg { @apply mt-0.5 shrink-0; }
+  .notice-warn { @apply border-warn/20 bg-warn-soft text-warn; }
+  .notice-info { @apply border-info/20 bg-info-soft text-info; }
+  .notice-danger { @apply border-danger/20 bg-danger-soft text-danger; }
+  .notice-success { @apply border-success/20 bg-success-soft text-success; }
+
+  /* Decision choices on the report: one radio per decision, then a single submit. */
+  .choice-card { @apply flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-surface p-3.5 transition hover:bg-hover has-[:checked]:border-ink has-[:checked]:bg-subtle has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent/40; }
+  .choice-card input { @apply mt-0.5; }
+
+  .skip-link { @apply sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-xl focus:bg-primary focus:px-4 focus:py-2 focus:text-on-primary; }
+
   /* App shell. */
   .nav-link { @apply flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-muted no-underline transition hover:bg-hover hover:text-ink; }
   .nav-link.active { @apply bg-hover font-medium text-ink; }

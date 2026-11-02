@@ -6,7 +6,6 @@ from __future__ import annotations
 from collections import Counter
 
 SCHEMA = "https://vega.github.io/schema/vega-lite/v5.json"
-RED, BLUE, GREEN = "#e5484d", "#3aa8f0", "#13914f"  # the design palette (static/src/app.css)
 
 
 def _spec(values: list[dict], **spec) -> dict:
@@ -74,7 +73,7 @@ def shap_contributions(attribution: dict) -> dict:
     """One claim's top contributions: red pushes towards anomalous, blue away."""
     values = [{"feature": f, "shap": round(v, 4)} for f, v in attribution.items()]
     return horizontal_bars(values, "feature", "shap", "Contribution to the anomaly score", height=120,
-                           color={"condition": {"test": "datum.shap > 0", "value": RED}, "value": BLUE},
+                           color={"condition": {"test": "datum.shap > 0", "value": token("red")}, "value": token("sky")},
                            tooltip=[{"field": "feature"}, {"field": "shap", "format": ".3f"}])
 
 
@@ -92,4 +91,4 @@ def share_by_typology(rows: list[dict], title: str, color: dict | None = None) -
 
 
 SHOULD_FLAG_COLOR = {"field": "should be flagged", "type": "nominal",
-                     "scale": {"domain": ["yes", "no"], "range": [GREEN, RED]}}
+                     "scale": {"domain": ["yes", "no"], "range": [token("green"), token("red")]}}
