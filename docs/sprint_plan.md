@@ -13,8 +13,8 @@ backdated.
 | --- | --- | --- |
 | I: Data Preparation and Environment Setup | 1, 2, 3 | 14 Sep – 4 Oct |
 | II: Core Functionality, Integration and Initial Testing | 4, 5 | 5 Oct – 18 Oct (progress review in Sprint 5) |
-| III: Approaching Completion and Hosting | 6, 7 | 19 Oct – 1 Nov |
-| Final documentation and presentation | 8 | 2 Nov – 7 Nov |
+| III: Project Completion, Deployment and Final Evaluation | 6, 7, 8 | 19 Oct – course completion review (dates per course announcements) |
+| Final documentation and presentation | 8 | 2 Nov – 7 Nov (part of Course Sprint III since the brief was rewritten) |
 
 ---
 
@@ -43,7 +43,7 @@ backdated.
 
 ## Course Sprint II: Core Functionality, Integration and Initial Testing
 
-### Sprint 4 (5–11 Oct): Scope change and data preparation — In progress
+### Sprint 4 (5–11 Oct): Scope change and data preparation — Done (one student task open)
 - [x] English-only scope approved; code-switching replaced by text-noise injection; classifier switched to Bio_ClinicalBERT (60 tests passing).
 - [x] `.gitignore` fixed so `src/data/` is version-controlled.
 - [x] Chapters 1–4 condensed and converted to past tense.
@@ -61,11 +61,37 @@ backdated.
 - [x] Choose the LLM provider and model; run the narrative layer on real flagged claims. (12 Oct: Hugging Face Inference returned 402, no account credit, so the narrative model runs on the Colab T4 with vLLM instead: 4-bit Llama 3.1 8B Instruct, `notebooks/03_run_pipeline.ipynb`. Gershon et al. (2025) turned out not to support a model choice; the choice rests on practical grounds and three passages citing it for ICD-11 need rewording in the documentation. Real run pending.)
 - [x] Single-seed classifier fine-tune on Colab (12 Oct): seed 42, validation precision 0.917, recall 0.978, F1 0.946 (TC-026). Per-typology breakdown (TC-027, `src/classification/evaluate.py`): fabrication 15/15, upcoding 15/15, ghost 14/15; false positives are mostly genuine caesarean notes written as "CS", a word-matching shortcut to address in the next dataset version.
 - [x] Dashboard shows generated reports; auditor can record a decision. (17 Oct, `3f083c0`, TC-029.)
-- [ ] Test records in `tests/test_plan.md`: expected result, actual result, correction (valid input, invalid input and failure cases).
-- [ ] Chapter 5 started: environment, implemented modules, initial results.
-- [ ] Prepare the review: demo, test evidence, one AI suggestion checked (from `docs/ai_use_log.md`).
+- [x] Test records in `tests/test_plan.md`: expected result, actual result, correction (valid input, invalid input and failure cases). TC-001 to TC-047 filled except TC-015 (usability, moved to Course Sprint III). Board item #24 still "In Progress".
+- [x] Chapter 5 started: environment, implemented modules, initial results (`compare/chapter5.txt`, sections 5.1–5.4.9 drafted). Board item #25 still in the Sprint Backlog.
+- [ ] Prepare the review: demo, test evidence, one AI suggestion checked (from `docs/ai_use_log.md`). Blocked on the student's own AI-use log entries (#54).
 
-## Course Sprint III: Approaching Completion and Hosting
+### Course Sprint II status (checked 2 Nov against `build_phase_sprints.txt`)
+Substantively met: the core workflow runs from a claims batch to stored, reviewable audit
+reports (pipeline and Django platform), the components are integrated (database, model,
+ICD-11 cache, LLM, web interface, workers), initial tests cover valid, invalid and failure
+cases, and the evaluation goes well beyond a baseline (held-out test results, TC-045/046).
+Still open before it can be called closed:
+- [ ] **GitHub Actions:** the brief asks for repeatable tests run through GitHub Actions, with results kept alongside the commit. The repository has no workflow (`.github/workflows/` does not exist).
+- [ ] AI-use log: one entry still has `[Student: fill in]` review fields, and the review needs "one AI suggestion checked" (#54, student's own).
+- [ ] Board: move #24, #25 to Done; close or carry #26 (review preparation) and #54.
+- [ ] Push `dev` (2 local commits on 2 Nov: README) and commit the open interface work.
+
+## Course Sprint III: Project Completion, Deployment and Final Evaluation
+
+### Rewritten course requirements (brief updated; mapped 2 Nov)
+The brief now asks for a complete, usable, deployed and evaluated project, not only
+"approaching completion". Each expectation below is mapped to existing work or a gap.
+- [ ] **Traceability record:** objective or requirement → component → test or evaluation → result → evidence. `tests/test_plan.md` covers FR/NFR/DR; an objective-level table for Chapter 5, with unmet requirements explained, is missing.
+- [~] **Coherent, task-based interface:** consistent design system, navigation, roles, dark mode and sign-in done 2 Nov (uncommitted). Still to check page by page: empty, loading, error and permission-denied states; keyboard use, visible focus, contrast, status never shown by colour alone; mobile layout.
+- [ ] **Honest uncertainty:** the report page shows the classifier's softmax output as "% confidence". The brief says a raw score is not a calibrated probability: relabel it (e.g. "model score") or evaluate calibration.
+- [ ] **Feedback as training data:** the brief asks that feedback be reviewed before it becomes training data. Auditor decisions are the review, and FR-14 gates promotion; Chapter 5 should state this argument explicitly.
+- [ ] **Operational release over HTTPS** with the real backend, database and model (#39). Hosting choice (#32) still open; the brief's examples are Cloudflare, AWS ECS and Hugging Face. The Colab GPU worker has not run end to end.
+- [ ] **Model release:** frozen classifier (`evaluated_v1/`) published with a model card and a pinned revision (brief Example 3; `docs/completion_plan.md` already plans the Hugging Face Hub hand-off).
+- [ ] **Testing and evaluation:** usability test with a representative user (TC-015), failure scenarios on the deployed system (expired session, unavailable worker or database, duplicate submission), defects corrected and retested.
+- [ ] **Operational evidence:** response times, failure rates, a restart and an unavailable-dependency test on the deployed release.
+- [ ] **Report:** Chapters 5 and 6, corrections to Chapters 1–4 (#40, #41, #42), AI-use declaration (#43).
+- [ ] **Reproducible handover:** release tag (#44), live URL or operating instructions, `.env.example`, migrations, model and data access instructions, user guide, known limitations, offer expiry and cost plan, secure assessor access.
+- [ ] **Demonstration:** representative test inputs, backup recording and screenshots, clearly labelled.
 
 ### Decisions for Sprints 6–8 (17 Oct)
 Code instructions in `docs/remaining_work_plan.md`.
