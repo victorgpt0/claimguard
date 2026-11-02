@@ -157,3 +157,42 @@ def test_queue_empty_state(auditor, db):
 def test_admin_links_back_to_the_application(admin):
     page = admin.get("/admin/").content.decode()
     assert "Back to ClaimGuard" in page and "css/admin.css" in page
+
+
+def _heldout(truth, reference, systems, **extra):
+    metrics = lambda p, r, f1, fpr: {"claims": 100, "positives": 10, "flagged": 9, "tp": 8, "fp": 1, "fn": 2,
+                                      "tn": 89, "precision": p, "recall": r, "f1": f1, "fpr": fpr}
+    return {"split": "test", "truth": truth, "claims": 100, "positives": 10, "reference": reference,
+            "bootstrap": {"resamples": 1000, "seed": 0},
+            "systems": {name: {"metrics": metrics(*m), "ci95": {"precision": [0.9, 1.0], "recall": [0.7, 0.9],
+                                                                  "f1": [0.8, 0.9], "fpr": [0, 0.01]}}
+                        for name, m in systems.items()}, **extra}
+
+
+def test_model_page_shows_the_held_out_test_results(admin, pipeline_files):
+    """FR-11: once the final evaluation has run, the page leads with the test-split figures
+    (read from experiments/evaluation, never recomputed) and keeps validation below, labelled."""
+    evaluation = pipeline_files / "experiments" / "evaluation"
+    text = evaluation / "v0.6-20k_test_text_20261027T215556Z"
+    fraud = evaluation / "v0.6-20k_test_is_fraud_20261027T215553Z"
+    text.mkdir(parents=True), fraud.mkdir(parents=True)
+    (text / "results.json").write_text(json.dumps(_heldout(
+        "text", "pipeline_text_lane", {"pipeline_text_lane": (0.993, 0.806, 0.890, 0.0003),
+                                       "zero_shot_llm": (0.916, 0.422, 0.578, 0.002)},
+        mcnemar={"zero_shot_llm": {"b": 100, "c": 25, "p_value": 8.1e-12}})))
+    (fraud / "results.json").write_text(json.dumps(_heldout(
+        "is_fraud", "pipeline", {"pipeline": (0.439, 0.775, 0.561, 0.11), "s_a": (0.7, 0.5, 0.6, 0.02),
+                                 "s_b": (0.7, 0.5, 0.58, 0.02)},
+        mcnemar={"s_a": {"p_value": 1e-17}, "s_b": {"p_value": 5e-10}},
+        seed_groups={"structured_only": {"systems": ["s_a", "s_b"], "seeds": 2, "precision": {"mean": 0.7, "std": 0},
+                                         "recall": {"mean": 0.5, "std": 0}, "f1": {"mean": 0.59, "std": 0.01},
+                                         "fpr": {"mean": 0.02, "std": 0}}})))
+    checkpoint = pipeline_files / "models" / "classifier_lora" / "active"
+    checkpoint.mkdir(parents=True)
+    (checkpoint / "metrics.json").write_text(json.dumps({"precision": 0.97, "recall": 0.99, "f1": 0.98, "positives": 179}))
+    page = admin.get(reverse("audit:model")).content.decode()
+    assert "Held-out test set · final evaluation" in page and "2026-10-27" in page
+    assert "0.806" in page and "0.700–0.900" in page  # recall and its CI
+    assert "8.1e-12" in page and "Structured-only model (2 seeds, mean ± std)" in page and "5.0e-10" in page
+    assert page.index("Held-out test set") < page.index("Validation split · used to choose the checkpoint")
+    assert "lower bound on the classifier alone" in page

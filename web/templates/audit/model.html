@@ -2,7 +2,7 @@
 {% load lucide %}
 {% block head_title %}Model performance{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Model performance</h1><p>How the active consistency classifier scores, and where it misses.</p></div></div>
+<div class="page-head"><div><h1>Model performance</h1><p>How the consistency classifier scored on the held-out test set, against the baselines, and on validation.</p></div></div>
 {% if path and not metrics %}
 <section class="card"><div class="empty-state">
   <span class="kpi-icon size-12 bg-warn-soft text-warn">{% lucide "gauge" size=22 %}</span>
@@ -15,26 +15,73 @@
   <h2>Pipeline settings are missing</h2><p>This page reads the checkpoint named in <code>config/config.yaml</code>.</p>
 </div></section>
 {% endif %}
+
+{% if heldout %}
+{% if active_is_evaluated is False %}<p class="notice notice-warn">{% lucide "triangle-alert" size=16 %}<span>The active checkpoint has changed since the final evaluation (a retraining run promoted a new one). The test results below describe the evaluated checkpoint, <code>evaluated_v1</code>, not the one now in use.</span></p>{% endif %}
+<section class="mb-2">
+  <div class="card-head"><div><h2>Held-out test set · final evaluation</h2>
+    <p>{{ heldout.run.claims }} test claims, {{ heldout.run.positives }} with notes that contradict the billed code. Evaluated once, {{ heldout.run.run_at }}; 95% bootstrap intervals over {{ heldout.run.bootstrap.resamples }} resamples.</p></div>
+    <span class="badge">{% lucide "lock" size=13 %} Test split</span></div>
+</section>
+<div class="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+  <div class="kpi"><span class="kpi-label">Precision</span><span class="kpi-value">{{ heldout.lane.precision|floatformat:3 }}</span><span class="kpi-note">95% CI {{ heldout.ci.precision.0|floatformat:3 }}–{{ heldout.ci.precision.1|floatformat:3 }}</span></div>
+  <div class="kpi"><span class="kpi-label">Recall</span><span class="kpi-value">{{ heldout.lane.recall|floatformat:3 }}</span>
+    <span class="kpi-note">95% CI {{ heldout.ci.recall.0|floatformat:3 }}–{{ heldout.ci.recall.1|floatformat:3 }} · NFR-05 floor 0.80 {% if heldout.lane.recall >= 0.8 %}<span class="text-success">met</span>{% else %}<span class="text-danger">not met</span>{% endif %}</span></div>
+  <div class="kpi"><span class="kpi-label">F1</span><span class="kpi-value">{{ heldout.lane.f1|floatformat:3 }}</span><span class="kpi-note">95% CI {{ heldout.ci.f1.0|floatformat:3 }}–{{ heldout.ci.f1.1|floatformat:3 }}</span></div>
+  <div class="kpi"><span class="kpi-label">False-positive rate</span><span class="kpi-value">{{ heldout.lane.fpr|floatformat:4 }}</span><span class="kpi-note">{{ heldout.lane.fp }} of {{ heldout.lane.tn|add:heldout.lane.fp }} consistent claims flagged</span></div>
+</div>
+<p class="notice notice-info">{% lucide "info" size=16 %}<span>These figures score the <strong>text lane</strong> as deployed: the classifier only sees claims that stage 1 flagged, so a fraud stage 1 missed counts against it. Recall here is therefore a lower bound on the classifier alone, which was not scored separately on the test split.</span></p>
+
+<section class="card">
+  <div class="card-head"><div><h2>Against the zero-shot LLM baseline</h2><p>Truth: the notes contradict the billed code. McNemar's exact test against the text lane.</p></div></div>
+  {% include "audit/partials/heldout_table.html" with rows=heldout.rows %}
+</section>
+
+<div class="grid2">
+  {% if charts.typology_test %}<section class="card"><h2>Text lane by fraud typology</h2>
+    <p class="caption">Recall for the three typologies that show in the notes; for the others any flag would be a false positive.</p>
+    <div data-chart="chart-typology-test"></div></section>{% endif %}
+  <section class="card"><h2>Text lane by stratum</h2>
+    <div class="overflow-x-auto"><table class="list"><thead><tr><th scope="col"></th><th scope="col" class="num">Claims</th><th scope="col" class="num">Positive</th><th scope="col" class="num">Prec.</th><th scope="col" class="num">Recall</th><th scope="col" class="num">F1</th></tr></thead>
+    <tbody>{% for label, row in heldout_strata %}<tr><td>{{ label }}</td><td class="num">{{ row.claims }}</td><td class="num">{{ row.positives }}</td><td class="num">{{ row.precision|floatformat:3 }}</td><td class="num">{{ row.recall|floatformat:3 }}</td><td class="num">{{ row.f1|floatformat:3 }}</td></tr>{% endfor %}</tbody></table></div>
+    {% if heldout.strata.rare_code_threshold %}<p class="caption mt-3 mb-0">Rare: {{ heldout.strata.rare_code_threshold }}.</p>{% endif %}</section>
+</div>
+{% endif %}
+
+{% if heldout_fraud %}
+<section class="card">
+  <div class="card-head"><div><h2>Whole system on fraud · held-out test set</h2><p>Truth: the claim is fraudulent ({{ heldout_fraud.run.positives }} of {{ heldout_fraud.run.claims }}), all typologies. McNemar's exact test against the full pipeline.</p></div></div>
+  {% include "audit/partials/heldout_table.html" with rows=heldout_fraud.rows %}
+  <p class="caption mt-3 mb-0">The pipeline's false positives come mostly from the structural-anomaly lane, not the classifier. The hybrid was chosen among three options on validation, and its rules encode the injected typologies, so part of its result is by construction.</p>
+</section>
+{% endif %}
+
 {% if metrics %}
-  <p class="caption">Active checkpoint: {{ record.run_id|default:path.name }} · validation split · epoch {{ metrics.epoch|default:"?" }}. The held-out test metrics are reported once, at the final evaluation.</p>
+<details class="card" {% if not heldout %}open{% endif %}>
+  <summary class="cursor-pointer"><h2 class="!mb-0 inline-flex">Validation split · used to choose the checkpoint</h2></summary>
+  <p class="caption mt-3">Active checkpoint: {{ record.run_id|default:path.name }} · validation split · epoch {{ metrics.epoch|default:"?" }}. These figures selected the checkpoint and tuned stage 1, so they are optimistic; report the test figures above.</p>
   <div class="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-    <div class="kpi"><span class="kpi-label">Precision</span><span class="kpi-value">{{ metrics.precision|floatformat:3 }}</span><span class="kpi-note">Flags that were right</span></div>
-    <div class="kpi"><span class="kpi-label">Recall</span><span class="kpi-value">{{ metrics.recall|floatformat:3 }}</span>
-      <span class="kpi-note">NFR-05 floor 0.80 · {% if metrics.recall >= 0.8 %}<span class="text-success">met</span>{% else %}<span class="text-danger">not met</span>{% endif %}</span></div>
-    <div class="kpi"><span class="kpi-label">F1</span><span class="kpi-value">{{ metrics.f1|floatformat:3 }}</span><span class="kpi-note">Balance of the two</span></div>
-    <div class="kpi"><span class="kpi-label">Caught</span><span class="kpi-value">{{ caught }} / {{ metrics.positives }}</span><span class="kpi-note">Inconsistent claims found</span></div>
+    <div class="kpi"><span class="kpi-label">Precision</span><span class="kpi-value">{{ metrics.precision|floatformat:3 }}</span></div>
+    <div class="kpi"><span class="kpi-label">Recall</span><span class="kpi-value">{{ metrics.recall|floatformat:3 }}</span></div>
+    <div class="kpi"><span class="kpi-label">F1</span><span class="kpi-value">{{ metrics.f1|floatformat:3 }}</span></div>
+    <div class="kpi"><span class="kpi-label">Caught</span><span class="kpi-value">{{ caught }} / {{ metrics.positives }}</span></div>
   </div>
+  <p class="caption">The classifier alone, on every validation claim (no stage-1 filter).</p>
   {% if typology_chart %}
-  <section class="card"><h2>Flagged by fraud typology</h2>
-    <p class="caption">For upcoding, ghost billing and record fabrication this is recall; for the others the notes match the code, so any flag is a false positive.</p>
-    <div data-chart="chart-typology"></div></section>
-  <div class="grid2">{% for title, rows in strata %}
-    <section class="card"><h2>{{ title }}</h2>
-      <div class="table-wrap"><table class="list"><thead><tr><th></th><th class="num">Claims</th><th class="num">Inconsistent</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th></tr></thead>
-      <tbody>{% for name, row in rows.items %}<tr><td>{{ name }}</td><td class="num">{{ row.claims }}</td><td class="num">{{ row.inconsistent }}</td><td class="num">{{ row.precision|floatformat:3 }}</td><td class="num">{{ row.recall|floatformat:3 }}</td><td class="num">{{ row.f1|floatformat:3 }}</td></tr>{% endfor %}</tbody></table></div>
-      {% if forloop.last and rare_threshold %}<p class="caption">Rare: {{ rare_threshold }}.</p>{% endif %}
-    </section>{% endfor %}</div>
+    <h3 class="mt-4 mb-1 text-sm font-semibold">Flagged by fraud typology</h3>
+    <div data-chart="chart-typology"></div>
+    <div class="grid2 mt-4">{% for title, rows in strata %}
+      <div><h3 class="mb-2 text-sm font-semibold">{{ title }}</h3>
+        <div class="table-wrap"><table class="list"><thead><tr><th scope="col"></th><th scope="col" class="num">Claims</th><th scope="col" class="num">Inconsistent</th><th scope="col" class="num">Precision</th><th scope="col" class="num">Recall</th><th scope="col" class="num">F1</th></tr></thead>
+        <tbody>{% for name, row in rows.items %}<tr><td>{{ name }}</td><td class="num">{{ row.claims }}</td><td class="num">{{ row.inconsistent }}</td><td class="num">{{ row.precision|floatformat:3 }}</td><td class="num">{{ row.recall|floatformat:3 }}</td><td class="num">{{ row.f1|floatformat:3 }}</td></tr>{% endfor %}</tbody></table></div>
+        {% if forloop.last and rare_threshold %}<p class="caption mt-2 mb-0">Rare: {{ rare_threshold }}.</p>{% endif %}
+      </div>{% endfor %}</div>
   {% else %}<p class="notice notice-info">{% lucide "info" size=16 %}<span>No stratified breakdown yet: run <code>python -m src.classification.evaluate</code>.</span></p>{% endif %}
+</details>
 {% endif %}
 {% endblock %}
-{% block charts %}{% if typology_chart %}{{ typology_chart|json_script:"chart-typology" }}{% include "partials_charts.html" %}{% endif %}{% endblock %}
+{% block charts %}
+{% if typology_chart %}{{ typology_chart|json_script:"chart-typology" }}{% endif %}
+{% if charts.typology_test %}{{ charts.typology_test|json_script:"chart-typology-test" }}{% endif %}
+{% if typology_chart or charts.typology_test %}{% include "partials_charts.html" %}{% endif %}
+{% endblock %}

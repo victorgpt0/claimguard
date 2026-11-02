@@ -47,7 +47,7 @@ Status: **Met** (test passed and recorded), **Partly** (met with a stated gap), 
 | FR-08 | Auditor review queue | TC-038 | Met | Re-run on Django (TC-008 superseded) |
 | FR-09 | Approve / reject / escalate with identity | TC-038 | Met | 80 imported decisions predate sign-in and have no reviewer |
 | FR-10 | Thresholds from configuration | TC-010 | Met | |
-| FR-11 | Metrics and retraining history for the Administrator | TC-011 | Partly | Model page shows validation metrics, not the held-out test metrics that now exist (TC-045); history table works |
+| FR-11 | Metrics and retraining history for the Administrator | TC-011 | Met | Model page leads with the held-out test results (TC-045): text lane with 95% CIs, both comparison tables with McNemar p, typology and strata; validation kept below, labelled as checkpoint selection (`web/audit/views.py` `model_performance`, test `test_model_page_shows_the_held_out_test_results`). History table works |
 | FR-12 | Decisions become labelled feedback | TC-012 | Met | All 59 examples simulated |
 | FR-13 | Retraining-due trigger | TC-013 | Met | |
 | FR-14 | No promotion of a weaker candidate | TC-014 | Met | Candidate refused on real data, 25 Oct |
@@ -85,4 +85,3 @@ Status: **Met** (test passed and recorded), **Partly** (met with a stated gap), 
 - TC-015: usability test (researcher).
 - #37, #38: record the marked rubric and coherence results in `tests/test_plan.md` and Chapter 5, then close.
 - Model release of `evaluated_v1` with a model card.
-- FR-11: show the held-out test metrics on the model page, or reword FR-11.

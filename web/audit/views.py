@@ -219,6 +219,42 @@ def _write_feedback_example(request, report: AuditReport, decision: str) -> None
 
 # --- Monitoring (Administrator) ----------------------------------------------------------------
 
+SYSTEM_NAMES = {
+    "pipeline_text_lane": "ClaimGuard text lane (stage 1, then the classifier)",
+    "zero_shot_llm": "Zero-shot LLM on every claim",
+    "zero_shot_llm_text_lane": "Zero-shot LLM in the classifier's place",
+    "pipeline": "ClaimGuard pipeline (both lanes)",
+    "hybrid_text_rules": "Hybrid: text lane plus five billing rules",
+    "rule_based": "Rule-based baseline",
+    "isolation_forest": "Isolation Forest alone",
+    "zero_shot_llm_funnel": "Pipeline with a zero-shot LLM in the classifier's place",
+    "structured_only": "Structured-only model",
+}
+
+
+def _heldout_rows(results: dict) -> list[dict]:
+    """One row per system, the reference first; seeded systems (structured-only) are shown
+    once as mean ± std over their seeds, with the weakest of their McNemar p-values."""
+    reference, mcnemar = results["reference"], results.get("mcnemar", {})
+    grouped = {name: g for name, g in (results.get("seed_groups") or {}).items()}
+    in_group = {s for g in grouped.values() for s in g["systems"]}
+    rows = []
+    for name, system in results["systems"].items():
+        if name in in_group:
+            continue
+        m, ci = system["metrics"], system.get("ci95", {})
+        rows.append({"name": SYSTEM_NAMES.get(name, name), "reference": name == reference,
+                     "precision": m["precision"], "recall": m["recall"], "f1": m["f1"], "fpr": m["fpr"],
+                     "f1_ci": ci.get("f1"), "flagged": m["flagged"],
+                     "p_value": (mcnemar.get(name) or {}).get("p_value")})
+    for name, g in grouped.items():
+        rows.append({"name": f"{SYSTEM_NAMES.get(name, name)} ({g['seeds']} seeds, mean ± std)", "reference": False,
+                     "precision": g["precision"]["mean"], "recall": g["recall"]["mean"], "f1": g["f1"]["mean"],
+                     "f1_std": g["f1"]["std"], "fpr": g["fpr"]["mean"], "flagged": None,
+                     "p_value": max((mcnemar.get(s) or {}).get("p_value") or 0 for s in g["systems"]) or None})
+    return sorted(rows, key=lambda r: (not r["reference"], -r["f1"]))
+
+
 @administrator_required
 def model_performance(request):
     context = {}
@@ -241,6 +277,25 @@ def model_performance(request):
             context["rare_threshold"] = evaluation.get("rare_code_threshold")
         if metrics:
             context["caught"] = round(metrics["recall"] * metrics["positives"])
+        text, fraud = services.heldout_evaluation("text"), services.heldout_evaluation("is_fraud")
+        if text:
+            lane = text["systems"][text["reference"]]
+            strata = lane.get("strata", {})
+            context["heldout"] = {"run": text, "lane": lane["metrics"], "ci": lane.get("ci95", {}),
+                                  "rows": _heldout_rows(text), "strata": strata}
+            context["heldout_strata"] = [
+                *((f"{'Noisy' if k == 'True' else 'Clean'} text", v) for k, v in strata.get("text_noise", {}).items()),
+                *((f"{k.capitalize()} ICD-11 codes", v) for k, v in strata.get("code_frequency", {}).items())]
+            if strata.get("flagged_by_typology"):
+                should_flag = {"upcoding", "ghost_billing", "record_fabrication"}
+                context.setdefault("charts", {})["typology_test"] = charts.share_by_typology(
+                    [{"typology": services.TYPOLOGY_NAMES.get(t, t), "share": v["rate"], "flagged": v["flagged"],
+                      "claims": v["claims"], "should be flagged": "yes" if t in should_flag else "no"}
+                     for t, v in strata["flagged_by_typology"].items()],
+                    "Share flagged", color=charts.SHOULD_FLAG_COLOR)
+        if fraud:
+            context["heldout_fraud"] = {"run": fraud, "rows": _heldout_rows(fraud)}
+        context["active_is_evaluated"] = services.active_is_evaluated()
     return render(request, "audit/model.html", context)
 
 

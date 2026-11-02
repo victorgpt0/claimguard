@@ -3,6 +3,7 @@ thresholds, FR-10), the ICD-11 cache, the Feedback Dataset, the active checkpoin
 pipeline run logs and the retraining history. Nothing here loads a model."""
 from __future__ import annotations
 
+import hashlib
 import json
 from functools import lru_cache
 from pathlib import Path
@@ -59,6 +60,39 @@ def feedback_repository() -> FeedbackRepository:
 
 def active_model_path() -> Path:
     return Path(config()["paths"]["model_dir"]) / "classifier_lora" / "active"
+
+
+def heldout_evaluation(truth: str) -> dict | None:
+    """The newest held-out (test split) evaluation for one truth label ("text" or "is_fraud"),
+    as written by src.evaluation.heldout to experiments/evaluation/<data>_test_<truth>_<time>/.
+    Only reads it: the test split is evaluated once and never rerun from here."""
+    experiments = config()["paths"].get("experiments_dir")
+    if not experiments:
+        return None
+    runs = sorted((Path(experiments) / "evaluation").glob(f"*_test_{truth}_*/results.json"),
+                  key=lambda p: p.parent.name.rsplit("_", 1)[-1], reverse=True)
+    for path in runs:
+        results = read_json(path)
+        if results and results.get("split") == "test" and results.get("truth") == truth:
+            stamp = path.parent.name.rsplit("_", 1)[-1]  # e.g. 20261027T215556Z
+            return {**results, "run": path.parent.name, "run_at": f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]}"}
+    return None
+
+
+def _digest(path: Path) -> str | None:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def active_is_evaluated() -> bool | None:
+    """Whether the active checkpoint is still the one the held-out evaluation scored
+    (classifier_lora/evaluated_v1). None when either is missing. After a promotion by the
+    feedback loop they differ, and the test results then describe the earlier checkpoint."""
+    root = Path(config()["paths"]["model_dir"]) / "classifier_lora"
+    active, evaluated = (_digest(root / d / "adapter_model.safetensors") for d in ("active", "evaluated_v1"))
+    return None if active is None or evaluated is None else active == evaluated
 
 
 def latest_pipeline_run() -> dict | None:
