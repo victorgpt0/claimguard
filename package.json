@@ -14,7 +14,7 @@
   "private": true,
   "scripts": {
     "build:css": "tailwindcss -i web/static/src/app.css -o web/static/css/app.css --minify",
-    "watch:css": "tailwindcss -i web/static/src/app.css -o web/static/css/app.css --watch",
+    "watch:css": "tailwindcss -i web/static/src/app.css -o web/static/css/app.css --watch --minify",
     "vendor": "mkdir -p web/static/vendor && cp node_modules/alpinejs/dist/cdn.min.js web/static/vendor/alpine.min.js && cp node_modules/@alpinejs/collapse/dist/cdn.min.js web/static/vendor/alpine-collapse.min.js && cp node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2 web/static/vendor/",
     "build": "npm run vendor && npm run build:css"
   }
