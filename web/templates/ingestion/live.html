@@ -1,0 +1,107 @@
+{% load lucide %}
+{% if settings_error %}<p class="notice notice-danger" role="alert">{% lucide "circle-alert" size=16 %}<span>config.yaml: {{ settings_error }}. Using the defaults.</span></p>{% endif %}
+
+<div class="flow">
+  {% for s in flow %}
+  <div class="flow-step">
+    <span class="label">{{ s.label }}<span class="kpi-icon {{ s.tone }}" aria-hidden="true">{% lucide s.icon size=16 %}</span></span>
+    <span class="value">{{ s.value }}</span>
+    <span class="note">{{ s.note }}</span>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="grid2">
+  <section class="card">
+    <div class="card-head"><div><h2>Claims platform</h2><p>SHA's side: what has been lodged, approved and paid by its clock.</p></div>
+      {% if platform %}<span class="badge status-succeeded">{% lucide "plug" size=13 %} connected</span>{% else %}<span class="badge status-failed">{% lucide "unplug" size=13 %} unreachable</span>{% endif %}</div>
+    {% if platform %}
+    <dl class="fields">
+      <div><dt>Platform date</dt><dd>{{ platform.as_of|date:"j M Y, H:i" }}</dd></div>
+      <div><dt>Clock</dt><dd>{% if platform.clock.playing %}running, {{ platform.clock.days_per_minute|floatformat:"0" }} days a minute{% else %}paused{% endif %}</dd></div>
+      <div><dt>Lodged / approved / paid</dt><dd>{{ platform.lodged }} / {{ platform.approved }} / {{ platform.paid }}</dd></div>
+      <div><dt>Awaiting payment</dt><dd>{{ platform.awaiting_payment }}</dd></div>
+      <div><dt>Paid so far</dt><dd>KES {{ platform.paid_amount|floatformat:"0g" }}</dd></div>
+      <div><dt>Next payment</dt><dd>{{ platform.next_payment_at|date:"j M Y"|default:"none left" }}</dd></div>
+    </dl>
+    {% else %}
+    <p class="caption mb-0">{{ platform_error }}. Start it with <code>uvicorn sha_cdp.app:app --port 8100</code> and check
+      <code>SHA_CDP_URL</code> and <code>SHA_CDP_API_KEY</code>.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="card-head"><div><h2>Feed</h2><p>ClaimGuard's side: where the last pull stopped.</p></div>
+      {% if state.paused %}<span class="badge status-partial">scheduled pulls paused</span>{% elif state.last_error %}<span class="badge status-failed">last pull failed</span>{% else %}<span class="badge status-succeeded">running</span>{% endif %}</div>
+    <dl class="fields">
+      <div><dt>Last successful pull</dt><dd>{{ state.last_success_at|date:"j M, H:i:s"|default:"never" }}</dd></div>
+      <div><dt>Received up to</dt><dd>{{ state.after_paid_at|date:"j M Y, H:i"|default:"nothing yet" }}</dd></div>
+      <div><dt>Audit period</dt><dd>{{ feed_settings.audit_period|capfirst }}</dd></div>
+      <div><dt>Closed periods go to</dt><dd>{% if feed_settings.auto_process %}{{ feed_settings.queue|upper }} worker{% else %}manual start{% endif %}</dd></div>
+    </dl>
+    {% if state.last_error %}<p class="notice notice-danger mt-4 mb-0">{% lucide "circle-alert" size=16 %}<span>{{ state.last_error }}</span></p>{% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <div class="card-head"><div><h2>Audit periods</h2>
+    <p>One batch per period, by the date SHA paid the claim. A period collects claims while it is open and closes when the
+      platform's date passes its last day; detection then runs on the whole batch, because provider- and member-level
+      patterns only show across many claims.</p></div></div>
+  {% if periods %}
+  <div class="table-wrap">
+  <table class="list">
+    <caption class="sr-only">Audit periods of the claims feed, newest first</caption>
+    <thead><tr><th scope="col">Period</th><th scope="col">Status</th><th scope="col" class="num">Claims</th><th scope="col" class="num">Flagged</th>
+      <th scope="col" class="num">Reports</th><th scope="col" class="num">Pending</th><th scope="col">Detection</th><th scope="col"></th></tr></thead>
+    <tbody>{% for b in periods %}<tr>
+      <td><a href="{% url 'audit:batch' b.pk %}">{{ b.label }}</a></td>
+      <td><span class="badge status-{{ b.status }}">{% if b.status == "open" %}collecting{% elif b.status == "uploaded" %}closed{% else %}{{ b.get_status_display|lower }}{% endif %}</span></td>
+      <td class="num">{{ b.n_claims }}</td>
+      <td class="num">{{ b.flagged|default_if_none:"—" }}</td>
+      <td class="num">{{ b.n_reports }}</td>
+      <td class="num">{{ b.n_pending }}</td>
+      <td>{% if b.job %}<span class="badge status-{{ b.job.status }}">{{ b.job.status }}</span>
+          {% if b.job.status == "running" and b.job.total %}<span class="caption">{{ b.job.percent }}%</span>{% endif %}
+          {% elif b.status == "open" %}<span class="caption">closes after {{ b.period_end|date:"j M" }}</span>{% else %}—{% endif %}</td>
+      <td>{% if b.status == "open" and user.is_auditor and b.n_claims %}
+        <form method="post" action="{% url 'ingestion:close' b.pk %}">{% csrf_token %}<button class="btn-ghost" type="submit">{% lucide "lock" size=14 %} Close now</button></form>{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <span class="kpi-icon size-12 bg-accent-soft text-accent">{% lucide "workflow" size=22 %}</span>
+    <h2>No claims received yet</h2>
+    <p>{% if platform %}The platform has paid {{ platform.paid }} claims by its clock.{% if user.is_administrator %} Move its clock on to release more, then pull.{% endif %}{% else %}Connect the claims platform first.{% endif %}</p>
+  </div>
+  {% endif %}
+</section>
+
+<div class="grid2">
+  <section class="card">
+    <h2>Pulls</h2>
+    {% if runs %}
+    <div class="table-wrap"><table class="list">
+      <thead><tr><th scope="col">Started</th><th scope="col">Status</th><th scope="col" class="num">Received</th><th scope="col" class="num">Stored</th>
+        <th scope="col" class="num">Quarantined</th><th scope="col" class="num">Already held</th><th scope="col">By</th></tr></thead>
+      <tbody>{% for r in runs %}<tr title="{{ r.cursor_from }} → {{ r.cursor_to }}{% if r.error %} · {{ r.error }}{% endif %}">
+        <td>{{ r.started_at|date:"j M, H:i:s" }}</td><td><span class="badge status-{{ r.status }}">{{ r.status }}</span>{% if r.batches_closed %} <span class="caption">closed {{ r.batches_closed|length }}</span>{% endif %}</td>
+        <td class="num">{{ r.fetched }}</td><td class="num">{{ r.accepted }}</td><td class="num">{{ r.rejected }}</td><td class="num">{{ r.duplicates }}</td>
+        <td>{{ r.triggered_by.username|default:"schedule" }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}<p class="caption mb-0">No pulls yet.</p>{% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Quarantine <span class="badge">{{ rejected_total }}</span></h2>
+    <p class="caption">Claims that failed the upload checks. They are kept here, never processed, for follow-up with the platform.</p>
+    {% if rejections %}
+    <div class="table-wrap"><table class="list">
+      <thead><tr><th scope="col">Claim</th><th scope="col">Paid</th><th scope="col">Problems</th></tr></thead>
+      <tbody>{% for r in rejections %}<tr><td>{{ r.claim_ref|default:"(no id)" }}</td><td>{{ r.paid_at|date:"j M Y" }}</td>
+        <td>{% for p in r.problems %}<span class="caption">{{ p.column }}: {{ p.message }}</span>{% if not forloop.last %}<br>{% endif %}{% endfor %}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}<p class="caption mb-0">Nothing quarantined.</p>{% endif %}
+  </section>
+</div>

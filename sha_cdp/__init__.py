@@ -5,7 +5,7 @@ Centralized Digital Platform, where they are reviewed, approved and paid (Social
 Insurance Regulations 2024, LN 49/2024, reg. 57(4)), and a post-payment audit reads the paid
 ones from there. This package plays that platform for the demonstration: a separate service
 with its own database, which ClaimGuard reaches only through a read-only, token-protected API
-(IR-07), the way it would reach SHA's.
+(IR-09), the way it would reach SHA's.
 
     db.py     its database: the claims, with their lodged/approved/paid times, and the clock
     clock.py  the simulation clock that releases claims as simulated time passes

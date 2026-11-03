@@ -135,6 +135,17 @@
   .badge.text_inconsistent, .badge.status-failed { @apply bg-danger-soft text-danger; }
   .badge.structural_anomaly, .badge.status-processing, .badge.status-running, .badge.status-queued { @apply bg-warn-soft text-warn; }
   .badge.status-processed, .badge.status-succeeded, .badge.status-imported { @apply bg-success-soft text-success; }
+  .badge.status-open, .badge.status-uploaded { @apply bg-info-soft text-info; }
+  .badge.status-partial { @apply bg-warn-soft text-warn; }
+  /* Data pipeline page (#66): the flow from the claims platform to the review queue. */
+  .flow { @apply mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5; }
+  .flow-step { @apply relative flex flex-col rounded-2xl border border-line bg-surface p-4 shadow-card; }
+  .flow-step + .flow-step::before { @apply absolute -left-3.5 top-1/2 hidden -translate-y-1/2 text-muted xl:block; content: "›"; font-size: 1.5rem; line-height: 1; }
+  .flow-step .label { @apply flex items-center justify-between gap-2 text-[13px] text-muted; }
+  .flow-step .value { @apply mt-2 text-[1.75rem] font-semibold leading-tight tracking-tight tabular-nums; }
+  .flow-step .note { @apply mt-1 text-[13px] text-muted; }
+  .controls { @apply flex flex-wrap items-center gap-2; }
+  .controls form { @apply m-0; }
   .count { @apply text-sm font-normal text-muted; }
   .tag { @apply rounded-md border border-line px-1.5 text-[11px] font-medium tracking-wide text-muted uppercase; }
 

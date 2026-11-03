@@ -43,6 +43,7 @@
       {% if user.is_auditor %}
       <a class="nav-link {% if url_name == 'queue' or url_name == 'report' %}active{% endif %}" href="{% url 'audit:queue' %}">{% lucide "inbox" size=18 %} Review queue</a>
       {% endif %}
+      <a class="nav-link {% if url_name == 'pipeline' %}active{% endif %}" href="{% url 'ingestion:pipeline' %}">{% lucide "workflow" size=18 %} Data pipeline</a>
       <a class="nav-link {% if url_name == 'batches' or url_name == 'batch' or url_name == 'upload' %}active{% endif %}" href="{% url 'audit:batches' %}">{% lucide "layers" size=18 %} Batches</a>
       {% if user.is_administrator %}
       <div class="nav-section">Models</div>

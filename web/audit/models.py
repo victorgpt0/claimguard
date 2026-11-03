@@ -9,10 +9,11 @@ from django.db import models
 
 
 class Batch(models.Model):
-    """A set of claims submitted together (FR-01): an auditor's upload, or a split imported
-    from an earlier pipeline run."""
+    """A set of claims audited together (FR-01): an auditor's upload, one audit period of the
+    claims feed (#66), or a split imported from an earlier pipeline run."""
 
     class Status(models.TextChoices):
+        OPEN = "open"             # a feed period still collecting claims; closes when the period ends
         UPLOADED = "uploaded"
         PROCESSING = "processing"
         PROCESSED = "processed"
@@ -34,6 +35,17 @@ class Batch(models.Model):
     # the ones the review pages show. Uploads are at most 10 MB.
     source_csv = models.TextField(blank=True)
     source_sha256 = models.CharField(max_length=64, blank=True)
+
+    class Source(models.TextChoices):
+        UPLOAD = "upload", "Manual upload"
+        FEED = "feed", "Claims feed"
+    # Where the claims came from: an auditor's ad hoc upload, or the scheduled pull from the
+    # claims platform (#66), which collects one batch per audit period (period_start..period_end,
+    # by the date SHA paid the claim).
+    source = models.CharField(max_length=10, choices=Source.choices, default=Source.UPLOAD, db_index=True)
+    period_start = models.DateField(null=True, blank=True)
+    period_end = models.DateField(null=True, blank=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-uploaded_at"]
@@ -57,6 +69,7 @@ class Claim(models.Model):
     service_date = models.DateField()
     discharge_date = models.DateField(null=True, blank=True)
     clinical_notes = models.TextField()
+    paid_at = models.DateTimeField(null=True, blank=True)   # when SHA paid it (feed claims only)
     anomaly_score = models.FloatField(null=True, blank=True)
 
     class Meta:

@@ -65,3 +65,11 @@ training:
   test_split: 0.2
   # Block K: 5 seeds for classifier fine-tuning, mean±std reporting
   random_seeds: [42, 123, 2024, 7, 31415]
+
+# The claims feed (#66, docs/ingestion_plan.md): claims pulled from the claims platform are
+# collected into one batch per audit period, by payment date, and processed when it ends.
+# SHA publishes no audit cycle, so the period is a choice: monthly | fortnightly | weekly.
+ingestion:
+  audit_period: monthly
+  auto_process: true   # queue a job when a period closes
+  queue: cpu           # cpu (no narratives) | gpu (the Colab worker, with narratives)

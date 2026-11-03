@@ -171,7 +171,7 @@ ClaimGuard does not own the claims it audits. In SHA's system, providers lodge c
 Centralized Digital Platform, where they are reviewed, approved and paid (LN 49/2024,
 regs. 57(4), 58, 59), and a post-payment audit reads the paid ones from there. `sha_cdp/`
 stands in for that platform (#65): a **separate service with its own database**, which the
-audit system reaches only through a read-only API (IR-07). Nothing in `src/` or `web/`
+audit system reaches only through a read-only API (IR-09). Nothing in `src/` or `web/`
 imports it.
 
 ```bash
@@ -194,6 +194,24 @@ before the first payment and is moved from the Data pipeline page, or with
 | `GET /health` | none | status and clock |
 
 The live claims set comes from `notebooks/06_generate_live_feed.ipynb` (`docs/data_generation.md`).
+
+### The claims feed and the Data pipeline page (#66)
+
+The web app pulls paid claims from the platform on a schedule, checks each one (bad ones are
+quarantined), and collects them into one batch per **audit period** (monthly by default;
+`config.yaml` `ingestion.audit_period`: monthly, fortnightly or weekly). When the platform's
+clock passes a period's last day, the batch is closed and queued for detection like an
+upload. Detection stays per batch because provider- and member-level patterns only show
+across many claims. The **Data pipeline** page shows the whole flow. Design and the SHA rules
+behind it: `docs/ingestion_plan.md`.
+
+```bash
+cd web && ../.venv/bin/celery -A claimguard_web worker -Q ingest -c 1 -n ingest@%h -B   # pulls (beat inside)
+cd web && ../.venv/bin/celery -A claimguard_web worker -Q cpu -c 1 -n cpu@%h            # closed periods
+```
+
+Settings (`.env`): `SHA_CDP_URL`, `SHA_CDP_API_KEY`, `SHA_CDP_ADMIN_TOKEN` (the same values the
+platform uses) and `FEED_SYNC_SECONDS` (30).
 
 ## Dataset
 

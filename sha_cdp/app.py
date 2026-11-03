@@ -1,4 +1,4 @@
-"""The platform's API (#65; IR-07 on the audit side). Two credentials, both from the
+"""The platform's API (#65; IR-09 on the audit side). Two credentials, both from the
 environment:
 
     SHA_CDP_API_KEY      read-only: the audit system's key, for the paid-claims export and stats

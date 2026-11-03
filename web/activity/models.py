@@ -24,6 +24,8 @@ class ActivityLog(models.Model):
         UPLOAD = "upload"
         JOB_STARTED = "job_started"
         DOWNLOAD = "download"
+        FEED_SYNC = "feed_sync"            # a pull from the claims platform started by hand (#66)
+        FEED_CONTROL = "feed_control"      # the feed paused or resumed, a batch closed early, the clock moved
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT,
                              related_name="activity")  # null for a failed or refused sign-in

@@ -84,7 +84,7 @@ def process_batch(self, job_id: int) -> str:
         claims = pd.read_csv(io.StringIO(batch.source_csv), dtype={"claim_id": str, "provider_id": str, "member_id": str})
         pipeline = build_pipeline(config, job.queue == Job.Queue.GPU, DjangoAuditRepository(batch), progress)
         thresholds = {k: v for k, v in (config.get("thresholds") or {}).items() if k in RECORDED_THRESHOLDS}
-        log = pipeline.run(claims, {"batch": f"upload:{batch.pk}", "job": job_id, "queue": job.queue,
+        log = pipeline.run(claims, {"batch": f"{batch.source}:{batch.pk}", "job": job_id, "queue": job.queue,
                                     "dataset": (config.get("pipeline") or {}).get("dataset"),
                                     "thresholds": thresholds}, progress=progress)
     except Exception as exc:

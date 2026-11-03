@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "accounts",
     "audit",
     "activity",
+    "ingestion",
 ]
 
 MIDDLEWARE = [
@@ -170,8 +171,23 @@ if CELERY_BROKER_URL.startswith("rediss://"):
     import ssl
     CELERY_BROKER_USE_SSL = {"ssl_cert_reqs": ssl.CERT_REQUIRED}
 
+# The claims feed (#66): the simulated SHA claims platform's API (sha_cdp/, IR-07), the
+# read-only key, the clock operator's token, and how often beat pulls (seconds).
+SHA_CDP_URL = os.environ.get("SHA_CDP_URL", "http://localhost:8100")
+SHA_CDP_API_KEY = os.environ.get("SHA_CDP_API_KEY", "")
+SHA_CDP_ADMIN_TOKEN = os.environ.get("SHA_CDP_ADMIN_TOKEN", "")
+FEED_SYNC_SECONDS = int(os.environ.get("FEED_SYNC_SECONDS", "30"))
+CELERY_BEAT_SCHEDULE = {
+    "sync-claims-feed": {"task": "ingestion.tasks.sync_claims_feed", "schedule": FEED_SYNC_SECONDS,
+                         "options": {"queue": "ingest", "expires": FEED_SYNC_SECONDS}},
+}
+
 # The ML pipeline's paths and thresholds (FR-10): the same config.yaml the scripts read.
 CLAIMGUARD_CONFIG = Path(os.environ.get("CLAIMGUARD_CONFIG", REPO_ROOT / "config" / "config.yaml"))
+# A relative path (.env.example's config/config.yaml) is the repository's, not the working
+# directory's: the web process runs from web/, the workers from either.
+if not CLAIMGUARD_CONFIG.is_absolute():
+    CLAIMGUARD_CONFIG = REPO_ROOT / CLAIMGUARD_CONFIG
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
