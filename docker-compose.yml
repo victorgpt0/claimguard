@@ -44,6 +44,7 @@ services:
     environment:
       DATABASE_URL: postgres://claimguard:${POSTGRES_PASSWORD:-claimguard-dev}@db:5432/claimguard
       REDIS_URL: redis://redis:6379/0
+      SHA_CDP_URL: http://sha-cdp:8100
     ports:
       - "8000:8000"
     volumes:
@@ -57,6 +58,23 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+
+  # The simulated SHA claims platform (#65): its own service and database (a SQLite file in
+  # the sha-cdp volume unless SHA_CDP_DATABASE_URL points elsewhere). The web app reaches it
+  # only through its API at SHA_CDP_URL. Load claims once:
+  #   docker compose run --rm sha-cdp python -m sha_cdp.seed /claims/live.parquet
+  sha-cdp:
+    build: .
+    command: uvicorn sha_cdp.app:app --host 0.0.0.0 --port 8100
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SHA_CDP_DATABASE_URL: ${SHA_CDP_DATABASE_URL:-sqlite:////var/lib/sha_cdp/sha_cdp.sqlite}
+    ports:
+      - "8100:8100"
+    volumes:
+      - sha_cdp:/var/lib/sha_cdp
 
   icd11-api:
     profiles: ["icd11"]
@@ -72,3 +90,4 @@ services:
 
 volumes:
   pgdata:
+  sha_cdp:

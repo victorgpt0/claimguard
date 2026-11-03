@@ -42,10 +42,17 @@ dev = [
     "pytest>=8.3.2",
     "pytest-mock>=3.14.0",
     "pytest-django>=4.9",
+    "httpx>=0.27",
+]
+# The simulated SHA claims platform (sha_cdp/, #65): a separate service with its own database.
+sha = [
+    "fastapi>=0.115",
+    "sqlalchemy>=2.0",
+    "uvicorn>=0.32",
 ]
 
 [tool.uv]
-default-groups = ["web", "ml", "dev"]
+default-groups = ["web", "ml", "sha", "dev"]
 package = false
 
 [[tool.uv.index]]

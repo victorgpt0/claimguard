@@ -8,7 +8,7 @@ ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 PYTHONUNBUFFERED=1 PATH="/app/.venv/
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-default-groups --group web
+RUN uv sync --frozen --no-default-groups --group web --group sha
 COPY . .
 RUN DJANGO_DEBUG=false DJANGO_SECRET_KEY=build-only python web/manage.py collectstatic --noinput
 

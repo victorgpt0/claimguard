@@ -165,6 +165,36 @@ Tests: `.venv/bin/python -m pytest` runs the ML and web suites together (SQLite 
 set `DATABASE_URL` to run the web tests on PostgreSQL). Design diagrams for Chapter 4 are in
 `docs/diagrams/`.
 
+## Simulated SHA claims platform (`sha_cdp/`)
+
+ClaimGuard does not own the claims it audits. In SHA's system, providers lodge claims on the
+Centralized Digital Platform, where they are reviewed, approved and paid (LN 49/2024,
+regs. 57(4), 58, 59), and a post-payment audit reads the paid ones from there. `sha_cdp/`
+stands in for that platform (#65): a **separate service with its own database**, which the
+audit system reaches only through a read-only API (IR-07). Nothing in `src/` or `web/`
+imports it.
+
+```bash
+# its database: SHA_CDP_DATABASE_URL (a second Neon database), else data/sha_cdp.sqlite
+.venv/bin/python -m sha_cdp.seed ~/gdrive/claimguard/data/processed/live-v1/live.parquet
+.venv/bin/uvicorn sha_cdp.app:app --port 8100        # API docs at http://localhost:8100/docs
+```
+
+The seeder gives each claim SHA's processing times (lodged within 7 days of discharge,
+approved after review, paid within 90 days of approval) and **drops the ground-truth
+labels**. A simulation clock releases claims as simulated time passes. It starts paused
+before the first payment and is moved from the Data pipeline page, or with
+`POST /api/v1/clock` and the operator token.
+
+| Endpoint | Token | Returns |
+|---|---|---|
+| `GET /api/v1/claims/paid?after_paid_at=&after_seq=&limit=` | `SHA_CDP_API_KEY` | claims paid by the clock's time, after the cursor, oldest first |
+| `GET /api/v1/stats` | `SHA_CDP_API_KEY` | claims lodged, approved and paid so far; next payment |
+| `POST /api/v1/clock` `{action: advance/play/pause/set}` | `SHA_CDP_ADMIN_TOKEN` | the clock |
+| `GET /health` | none | status and clock |
+
+The live claims set comes from `notebooks/06_generate_live_feed.ipynb` (`docs/data_generation.md`).
+
 ## Dataset
 
 The synthetic claims dataset is built in three stages (Section 3.2.1); all three run from
