@@ -342,3 +342,26 @@ were tuned on v0.5 and must be re-tuned on v0.6 (`python -m src.detection.tune_s
   generator, catalogue or parameters change, so earlier versions stay intact.
 - **Tests:** `venv/bin/python -m pytest -q tests/test_dataset_pipeline.py` runs all three
   stages at small scale with a fake LLM (TC-016 to TC-021 in `tests/test_plan.md`).
+
+## Live claims feed (`live-v1`, #64)
+
+The dashboard's data pipeline (`docs/ingestion_plan.md`) needs claims that arrive over time
+from a separate claims platform. They come from a fresh set generated with the same three
+stages (`notebooks/06_generate_live_feed.ipynb`), not from the training data:
+
+| Choice | Value | Why |
+|---|---|---|
+| Seed | 2026 | a new draw, not a re-sample of v0.6 |
+| Claims | 2,400 | about 400 a month, so each monthly audit batch has enough claims for the provider-level features |
+| Service dates | 2025-10-01 to 2026-03-31 | the six months after the training window: the feed is "future" data |
+| Providers | v0.6's 240 (`--providers`) | SHA's provider population does not change between months; the provider-level features compare a provider's new claims with its history |
+| Ids | `--id-prefix L`: `LCLM000001`, `LMBR000001` | no collision with v0.6 claims or members, so member histories stay separate |
+| Build | `build_dataset --live` → `live.parquet` | no split; every claim is unseen input (all boilerplate notes are new; text noise uses the held-out glossary) |
+
+The labels stay in `live.parquet` for offline evaluation. The claims platform strips them
+before it serves a claim (`sha_cdp/seed.py`), so nothing in the audit system sees them.
+
+A provider flagged for inflated caesareans in the live set bills its extra caesareans
+against a history of normal deliveries from training, so its share is diluted compared
+with a provider whose whole history is fraudulent. That is the realistic case (a provider
+that turns fraudulent) and is a recorded limitation if the provider-level lane misses it.

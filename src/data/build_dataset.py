@@ -15,6 +15,10 @@ split dataset:
   6. Write one parquet per split and a manifest recording inputs, counts and code version.
 
 Usage: python -m src.data.build_dataset --raw data/raw --out data/processed
+
+With --live (the simulated claims feed, docs/ingestion_plan.md) steps 4 and 5 change: there
+is no split, every claim is treated as unseen input (all of this run's boilerplate notes are
+new, and text noise uses the held-out glossary), and the output is one live.parquet.
 """
 from __future__ import annotations
 
@@ -271,12 +275,65 @@ def build(raw: Path, out: Path, seed: int = 42) -> dict:
     return manifest
 
 
+def build_live(raw: Path, out: Path, seed: int) -> dict:
+    """The live feed: the same claims, notes, typologies and labels as build(), but one
+    unsplit set whose inputs are all unseen. The labels stay in live.parquet for offline
+    evaluation; the simulated claims platform strips them before serving any claim."""
+    catalogue = load_catalogue()
+    generator_config = json.loads((raw / "generator_config.json").read_text())
+    target = round(generator_config["n_claims"] * generator_config["fraud_prevalence"]
+                   / generator_config["n_typologies"])
+    claims = pd.read_parquet(raw / "base_claims.parquet")
+    notes = pd.read_json(raw / "notes.jsonl", lines=True)
+    boilerplate_df = pd.read_json(raw / "boilerplate_notes.jsonl", lines=True)
+    rejected = notes["rejected_reason"].notna()
+    claims = claims.merge(notes.loc[~rejected, ["claim_id", "clinical_notes"]], on="claim_id")
+    boilerplate = boilerplate_df.loc[boilerplate_df["rejected_reason"].isna(), "clinical_notes"].tolist()
+    if len(boilerplate) < 10:
+        raise ValueError(f"Only {len(boilerplate)} boilerplate notes passed validation; "
+                         "regenerate stage B with a larger --n-boilerplate")
+
+    claims = derive_labels(inject_claim_level_typologies(claims, catalogue, target, boilerplate, seed))
+    live = apply_text_noise(claims, fraction=NOISE_FRACTION, rate=NOISE_RATE, seed=seed + 100,
+                            abbreviations=UNSEEN_ABBREVIATIONS)
+    live = apply_structured_noise(live, fraction=STRUCTURED_NOISE_FRACTION, seed=seed + 200)
+
+    out.mkdir(parents=True, exist_ok=True)
+    live.sort_values("claim_id").to_parquet(out / "live.parquet", index=False)
+    manifest = {
+        "git_commit": _git_commit(),
+        "seed": seed,
+        "kind": "live",
+        "generator_config": generator_config,
+        "inputs": {p.name: _sha256(p) for p in sorted(raw.iterdir()) if p.is_file()},
+        "notes_rejected": int(rejected.sum()),
+        "boilerplate_notes": len(boilerplate),
+        "per_typology_target": target,
+        "noise": {"fraction": NOISE_FRACTION, "rate": NOISE_RATE, "glossary": "unseen",
+                  "structured_fraction": STRUCTURED_NOISE_FRACTION},
+        "live": {
+            "claims": len(live),
+            "fraud": int(live["is_fraud"].sum()),
+            "inconsistent": int((live["label"] == "inconsistent").sum()),
+            "service_dates": [str(live["service_date"].min()), str(live["service_date"].max())],
+            "providers": int(live["provider_id"].nunique()),
+            "typologies": live["fraud_typology"].value_counts().to_dict(),
+        },
+    }
+    (out / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    return manifest
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--raw", type=Path, default=Path("data/raw"))
     parser.add_argument("--out", type=Path, default=Path("data/processed"))
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--live", action="store_true", help="build the unsplit live feed set (live.parquet)")
     args = parser.parse_args()
+    if args.live:
+        print(json.dumps(build_live(args.raw, args.out, args.seed)["live"], indent=2))
+        return
     manifest = build(args.raw, args.out, args.seed)
     print(json.dumps(manifest["splits"], indent=2))
 

@@ -262,7 +262,8 @@ def run(requests_path: Path, out_path: Path, boilerplate_out: Path, generate: Ge
     for start in range(0, len(pending), batch_size):
         batch = pending[start:start + batch_size]
         prompts = [build_prompt(r, seed) for r in batch]
-        seeds = [seed + int(r["claim_id"][3:]) for r in batch]
+        # The number in the id: CLM000123 and the live feed's LCLM000123 both give 123.
+        seeds = [seed + int(r["claim_id"].rsplit("CLM", 1)[-1]) for r in batch]
         notes = synthesise(prompts, seeds, generate, lambda i, n: validate_note(n, batch[i]))
         with out_path.open("a") as f:
             for request, note in zip(batch, notes):

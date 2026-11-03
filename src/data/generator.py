@@ -19,6 +19,13 @@ labelled, so the positive class stays tied to specific fraudulent claims.
 Tariffs and ICD-11 codes come from sha_catalogue.yaml (LN 56/2025; WHO ICD-11 2026-01).
 
 Usage: python -m src.data.generator --n-claims 5000 --seed 42 --out data/raw
+
+The live claims feed (docs/ingestion_plan.md) is a separate run with a new seed, a service
+window after the training data, the training data's providers and an id prefix, so its
+claims and members never collide with the training set's:
+
+    python -m src.data.generator --n-claims 2400 --seed 2026 --start-date 2025-10-01 \
+        --end-date 2026-03-31 --providers <v0.6 raw>/providers.parquet --id-prefix L --out <raw>
 """
 from __future__ import annotations
 
@@ -68,6 +75,9 @@ class GeneratorConfig:
     # dependents to a household it bills for.
     realistic_max_dependents: int = 6
     fictitious_dependents: tuple[int, int] = (10, 30)
+    # Prepended to claim and member ids ("L" -> LCLM000001, LMBR000001). Empty for the
+    # training data; set for the live feed so its ids never collide with the training set's.
+    id_prefix: str = ""
 
     @property
     def per_typology_target(self) -> int:
@@ -116,7 +126,7 @@ class _ClaimFactory:
         self._next_member = 1
 
     def new_member_id(self) -> str:
-        member_id = f"MBR{self._next_member:06d}"
+        member_id = f"{self.config.id_prefix}MBR{self._next_member:06d}"
         self._next_member += 1
         return member_id
 
@@ -250,11 +260,18 @@ def _fictitious_dependent_claims(factory: _ClaimFactory, catalogue: dict, base: 
     return rows
 
 
-def generate_base_claims(catalogue: dict, config: GeneratorConfig) -> tuple[pd.DataFrame, pd.DataFrame]:
+def generate_base_claims(catalogue: dict, config: GeneratorConfig,
+                         providers: pd.DataFrame | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Returns (claims, providers). `claims` has exactly config.n_claims rows, with the
-    provider-level typology flags set and no clinical notes."""
+    provider-level typology flags set and no clinical notes. `providers` reuses an existing
+    provider population (the live feed bills through the training data's providers);
+    otherwise config.n_providers new ones are drawn."""
     rng = np.random.default_rng(config.seed)
-    providers = generate_providers(config.n_providers, rng)
+    if providers is None:
+        providers = generate_providers(config.n_providers, rng)
+    else:
+        providers = providers[["provider_id", "facility_level", "facility_type"]].reset_index(drop=True)
+        config.n_providers = len(providers)
     factory = _ClaimFactory(catalogue, providers, config, rng)
     target = config.per_typology_target
 
@@ -270,7 +287,7 @@ def generate_base_claims(catalogue: dict, config: GeneratorConfig) -> tuple[pd.D
     for flag in ("is_inflated_csection", "is_anomalous_dependent"):
         claims[flag] = claims.get(flag, pd.Series(False, index=claims.index)).eq(True)
     claims = claims.sample(frac=1.0, random_state=config.seed).reset_index(drop=True)
-    claims.insert(0, "claim_id", [f"CLM{i:06d}" for i in range(1, len(claims) + 1)])
+    claims.insert(0, "claim_id", [f"{config.id_prefix}CLM{i:06d}" for i in range(1, len(claims) + 1)])
     return claims, providers
 
 
@@ -300,11 +317,17 @@ def main() -> None:
     parser.add_argument("--n-providers", type=int, default=60)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--out", type=Path, default=Path("data/raw"))
+    parser.add_argument("--start-date", default=GeneratorConfig.start_date)
+    parser.add_argument("--end-date", default=GeneratorConfig.end_date)
+    parser.add_argument("--providers", type=Path, help="reuse this providers.parquet instead of drawing new providers")
+    parser.add_argument("--id-prefix", default="", help="prefix for claim and member ids (the live feed uses L)")
     args = parser.parse_args()
 
-    config = GeneratorConfig(n_claims=args.n_claims, n_providers=args.n_providers, seed=args.seed)
+    config = GeneratorConfig(n_claims=args.n_claims, n_providers=args.n_providers, seed=args.seed,
+                             start_date=args.start_date, end_date=args.end_date, id_prefix=args.id_prefix)
     catalogue = load_catalogue()
-    claims, providers = generate_base_claims(catalogue, config)
+    existing = pd.read_parquet(args.providers) if args.providers else None
+    claims, providers = generate_base_claims(catalogue, config, existing)
 
     args.out.mkdir(parents=True, exist_ok=True)
     claims.to_parquet(args.out / "base_claims.parquet", index=False)

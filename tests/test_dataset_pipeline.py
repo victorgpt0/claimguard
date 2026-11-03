@@ -218,3 +218,42 @@ def test_validate_note_rejects_notes_that_switch_language():
     """v0.6 had 156 notes (0.8%) where the note model switched to Chinese mid-note."""
     assert validate_note("Presented with severe headache and 急剧增加的心率，血压显著升高。") == "not in English"
     assert validate_note("Temp 37.8°C, pt c/o dysuria; naïve to antibiotics, café-au-lait spots noted.") is None
+
+
+@pytest.fixture(scope="module")
+def live(built, tmp_path_factory):
+    """The live feed set (#64): a new seed and window, the training providers, prefixed ids."""
+    from src.data.build_dataset import build_live
+    raw = tmp_path_factory.mktemp("live_raw")
+    out = tmp_path_factory.mktemp("live_processed")
+    _, providers = generate_base_claims(load_catalogue(), GeneratorConfig(n_claims=N_CLAIMS, n_providers=40, seed=7))
+    config = GeneratorConfig(n_claims=600, seed=2026, start_date="2025-10-01", end_date="2026-03-31", id_prefix="L")
+    catalogue = load_catalogue()
+    claims, used = generate_base_claims(catalogue, config, providers)
+    claims.to_parquet(raw / "base_claims.parquet", index=False)
+    with open(raw / "note_requests.jsonl", "w") as f:
+        for request in note_requests(claims, catalogue):
+            f.write(json.dumps(request) + "\n")
+    (raw / "generator_config.json").write_text(json.dumps({"n_claims": 600, "fraud_prevalence": 0.10, "n_typologies": 6}))
+    run(raw / "note_requests.jsonl", raw / "notes.jsonl", raw / "boilerplate_notes.jsonl", fake_llm, seed=2026,
+        n_boilerplate=32)
+    manifest = build_live(raw, out, seed=2026)
+    return providers, used, manifest, pd.read_parquet(out / "live.parquet")
+
+
+def test_live_set_reuses_providers_and_prefixes_ids(built, live):
+    providers, used, _, frame = live
+    pd.testing.assert_frame_equal(used, providers[["provider_id", "facility_level", "facility_type"]])
+    assert set(frame["provider_id"]) <= set(providers["provider_id"])
+    assert frame["claim_id"].str.startswith("LCLM").all() and frame["member_id"].str.startswith("LMBR").all()
+    training_ids = set(built[0]["claim_id"]) | set(built[0]["member_id"])
+    assert not training_ids & (set(frame["claim_id"]) | set(frame["member_id"]))
+
+
+def test_live_set_is_unsplit_labelled_and_after_training(live):
+    _, _, manifest, frame = live
+    assert manifest["kind"] == "live" and manifest["live"]["claims"] == len(frame)
+    assert pd.to_datetime(frame["service_date"]).min() >= pd.Timestamp("2025-10-01")
+    assert frame["is_fraud"].sum() > 0 and frame["fraud_typology"].nunique() >= 5
+    unseen_forms = [v for v in UNSEEN_ABBREVIATIONS.values() if len(v) > 2]
+    assert frame["clinical_notes"].apply(lambda t: any(f in t for f in unseen_forms)).any()
