@@ -12,3 +12,5 @@ web/staticfiles
 .env
 config/config.yaml
 node_modules
+# The deployment folder holds the VM's secrets (deploy/.env, TLS and origin keys); the app never needs it
+deploy/
