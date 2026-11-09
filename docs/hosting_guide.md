@@ -1,5 +1,9 @@
 # Free Hosting Guide
 
+> **Superseded for the platform (9 Nov 2026):** ClaimGuard is deployed on an Oracle Cloud
+> Always Free VM behind Cloudflare at https://claimsguard.tech; the runbook is
+> [`deploy/README.md`](../deploy/README.md). This guide is kept for the earlier options.
+
 Two legitimate, genuinely $0 paths to put the ClaimGuard dashboard on your own domain.
 Both were checked against current provider docs before writing this (not guessed) —
 specifically: **Hugging Face Spaces' free tier does not support custom domains** (that

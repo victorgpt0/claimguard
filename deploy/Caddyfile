@@ -1,0 +1,34 @@
+# Caddy in front of the web application (deploy/README.md). Cloudflare proxies the domain and
+# connects here over HTTPS ("Full (strict)"), presenting the Cloudflare Origin Certificate in
+# /certs. Requests that do not come from Cloudflare's addresses (CF_IPS, written into .env by
+# scripts/04-cloudflare-ips.sh) are dropped, so the VM's IP cannot be used to skip Cloudflare.
+{
+	servers {
+		trusted_proxies static {$CF_IPS}
+		client_ip_headers CF-Connecting-IP
+	}
+}
+
+www.{$DOMAIN} {
+	tls /certs/origin.pem /certs/origin.key
+	@direct not remote_ip {$CF_IPS}
+	abort @direct
+	redir https://{$DOMAIN}{uri} permanent
+}
+
+{$DOMAIN} {
+	tls /certs/origin.pem /certs/origin.key
+	@direct not remote_ip {$CF_IPS}
+	abort @direct
+
+	encode zstd gzip
+	# Batch uploads (CSV); Cloudflare's free plan caps a request at 100 MB anyway.
+	request_body {
+		max_size 100MB
+	}
+	reverse_proxy web:8000
+	log {
+		output stdout
+		format console
+	}
+}

@@ -48,3 +48,10 @@ node_modules/
 
 # JUnit reports written by `pytest --junitxml` (CI keeps them as run artifacts)
 test-results/
+web/celerybeat-schedule*
+
+# Oracle deployment secrets, made on the VM (deploy/README.md); deploy/.env is covered by .env
+deploy/tls/
+deploy/ca-private/
+deploy/origin/
+deploy/*.dump
