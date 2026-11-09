@@ -7,7 +7,7 @@
 set -euo pipefail
 
 REPO_SSH="${REPO_SSH:-git@github.com:victorgpt0/claimguard.git}"
-BRANCH="${BRANCH:-dev}"
+BRANCH="${BRANCH:-main}"   # main is the deployed branch (.github/workflows/deploy.yml)
 APP_DIR=/opt/claimguard
 
 step() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }

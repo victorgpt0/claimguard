@@ -2,7 +2,11 @@
 
 The whole platform on one Oracle Cloud **Always Free** ARM VM (home region UK South,
 `uk-london-1`), served at **https://claimsguard.tech** with Cloudflare in front. You run every
-step yourself; each script is safe to run again.
+step yourself; each script is safe to run again, so a new VM is rebuilt by following the same
+steps (keep a copy of `deploy/.env`, the CA key and the origin key, or new ones are made).
+
+**`main` is what is deployed.** Work happens on `dev`; a pull request from `dev` into `main`
+runs the tests, and merging it deploys automatically (`.github/workflows/deploy.yml`, step 10).
 
 ```
 Visitors ─HTTPS─▶ Cloudflare (proxied: claimsguard.tech, www) ─HTTPS─▶ VM :443 Caddy ─▶ web (gunicorn)
@@ -16,7 +20,7 @@ Colab GPU worker ─TLS─▶ VM :5432 PostgreSQL, :6380 Redis (password + the d
 
 | Port | Open to | Why |
 |---|---|---|
-| 22 | your IP (or anywhere: keys only, fail2ban) | SSH |
+| 22 | anywhere (keys only, fail2ban); GitHub Actions deploys through it | SSH |
 | 443 | anywhere in the security list; Caddy drops all but Cloudflare's addresses | the site |
 | 5432, 6380 | anywhere, TLS + password required | the Colab GPU worker |
 
@@ -34,7 +38,8 @@ Colab GPU worker ─TLS─▶ VM :5432 PostgreSQL, :6380 Redis (password + the d
 
 ## 0. Before you start (laptop)
 
-1. Push `dev` (the VM clones it): `git -C claimguard push`.
+1. Put the code on `main` (the VM clones it): push `dev`, open a pull request `dev` → `main`
+   on GitHub and merge it once the tests pass. The deploy job is skipped until step 10.
 2. Have ready: the Neon **direct** URL (`DATABASE_URL_UNPOOLED` in the laptop's `.env`) and
    `rclone config show gdrive` output (step 3).
 
@@ -56,7 +61,7 @@ Colab GPU worker ─TLS─▶ VM :5432 PostgreSQL, :6380 Redis (password + the d
    then Edit again → *Reserved public IP* → `claimguard-ip`.
 4. **Security list:** VCN → Security Lists → *Default Security List* → Add ingress rules
    (source `0.0.0.0/0`, TCP): destination ports `443`, `5432`, `6380`. Leave the existing
-   port-22 rule, or narrow its source to your IP/32 if your IP is fixed.
+   port-22 rule open to `0.0.0.0/0`: GitHub's runners connect from changing addresses.
 
 ## 2. Bootstrap the VM
 
@@ -68,7 +73,7 @@ ssh ubuntu@<ip> 'bash 01-bootstrap-vm.sh'
 Updates, Docker, rclone, 4 GB swap, keys-only SSH with fail2ban, and the VM's own iptables
 opened for 80/443/5432/6380 (Oracle's Ubuntu images reject everything but SSH there, on top of
 the security list). It prints a **deploy key**: add it on GitHub (repository → Settings → Deploy
-keys, read-only) and press Enter; it clones `dev` into `/opt/claimguard`. Log out and back in.
+keys, read-only) and press Enter; it clones `main` into `/opt/claimguard`. Log out and back in.
 
 ## 3. Google Drive
 
@@ -156,7 +161,35 @@ Nightly at 02:30 (Nairobi) both databases are dumped to `/var/backups/claimguard
 `MyDrive/claimguard/backups/oracle` (30 days); Cloudflare's ranges refresh monthly.
 Restore: `docker compose exec -T db pg_restore -U claimguard -d claimguard --clean --no-owner < <file>.dump`.
 
-## 10. Check before announcing the address
+## 10. Automatic deploys from `main`
+
+```bash
+bash /opt/claimguard/deploy/scripts/07-deploy-access.sh <reserved-ip>
+```
+
+It makes an SSH key that can only run `deploy/scripts/deploy.sh` on the VM (no shell), and prints
+three values. Add each on GitHub → repository → Settings → Secrets and variables → Actions →
+*New repository secret*: `DEPLOY_HOST`, `DEPLOY_KNOWN_HOSTS`, `DEPLOY_SSH_KEY`. Then Actions →
+*Deploy* → *Run workflow* once to check it.
+
+From then on:
+
+1. Work on `dev` and push it (the tests run on every push).
+2. Open a pull request `dev` → `main`. The tests run on the pull request.
+3. Merge it. The *Deploy* workflow runs the tests on `main`, then over SSH the VM fetches that
+   commit, builds the images, restarts what changed (the web container migrates first), waits
+   for the login page, and the workflow checks https://claimsguard.tech.
+
+If the build fails, the site keeps running the previous version. If the new version starts but
+does not answer, the job fails with the web logs and the new version stays up (no automatic
+rollback, because it may already have migrated the database): fix forward with another pull
+request, or go back by hand with `bash /opt/claimguard/deploy/scripts/deploy.sh <older-sha>`
+(only for commits without migrations). `deploy/.deploy-history` lists what was deployed when.
+
+Optional, if your plan offers it for private repositories: Settings → Rules → a ruleset for
+`main` requiring a pull request and the *Tests* check, so nothing reaches the site unreviewed.
+
+## 11. Check before announcing the address
 
 - [ ] https://claimsguard.tech loads with a valid padlock; `www` redirects to it.
 - [ ] Skipping Cloudflare fails: `curl -kv https://<reserved-ip>/ -H 'Host: claimsguard.tech'` is cut off.
@@ -171,10 +204,11 @@ Restore: `docker compose exec -T db pg_restore -U claimguard -d claimguard --cle
 
 | Task | Command (in `/opt/claimguard/deploy`) |
 |---|---|
-| Update to the latest `dev` | `git -C .. pull --ff-only && docker compose up -d --build` |
+| Deploy | merge a pull request into `main` (automatic); by hand: `bash scripts/deploy.sh` |
 | Logs | `docker compose logs -f --tail 100 <service>` |
 | Restart one service | `docker compose restart <service>` |
 | After rclone restarts | `docker compose restart` (containers keep the old, empty mount otherwise) |
+| What is deployed | `tail .deploy-history` |
 | Shell / Django admin commands | `docker compose exec web python web/manage.py <command>` |
 | Disk use | `df -h /; docker system df` (`docker image prune` after updates) |
 | Rotate a secret | edit `.env`, `docker compose up -d`; for the DB password also `ALTER ROLE ... PASSWORD` |

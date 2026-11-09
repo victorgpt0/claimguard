@@ -55,3 +55,4 @@ deploy/tls/
 deploy/ca-private/
 deploy/origin/
 deploy/*.dump
+deploy/.deploy-history

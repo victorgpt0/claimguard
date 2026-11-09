@@ -1,0 +1,75 @@
+# Continuous deployment: main is what runs at https://claimsguard.tech. Merging a pull request
+# into main (or any push to it) runs the full test suite and, if it passes, deploys that commit
+# to the Oracle Cloud VM over SSH. The SSH key can only run deploy/scripts/deploy.sh there
+# (deploy/scripts/07-deploy-access.sh), which builds the images on the VM, restarts the stack
+# and waits for the site. A failed build leaves the running site untouched.
+#
+# Secrets (deploy/README.md, step 10): DEPLOY_HOST, DEPLOY_KNOWN_HOSTS, DEPLOY_SSH_KEY.
+# Until they are set, the deploy job is skipped with a notice instead of failing.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:       # redeploy the current main by hand (Actions tab -> Deploy -> Run)
+
+permissions:
+  contents: read
+
+# One deploy at a time, and never cancel one halfway; a newer merge waits its turn.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  SITE_URL: https://claimsguard.tech
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  deploy:
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 75     # the first build on the VM (torch, 2 OCPU) is slow; later ones reuse layers
+    steps:
+      - name: Check the deploy secrets
+        id: secrets
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ -n "$HOST" ] && [ -n "$KEY" ] && [ -n "$KNOWN" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Deploy secrets are not set yet (deploy/README.md, step 10); nothing deployed."
+          fi
+
+      - name: Deploy ${{ github.sha }} on the VM
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+          # The VM ignores the command line except as the commit to deploy.
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes \
+              -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+              "ubuntu@$HOST" "$GITHUB_SHA"
+
+      - name: Check the public site
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          for i in $(seq 12); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "$SITE_URL/accounts/login/" || true)"
+            [ "$code" = 200 ] && { echo "$SITE_URL answers 200"; break; }
+            [ "$i" = 12 ] && { echo "::error::$SITE_URL/accounts/login/ answered $code"; exit 1; }
+            sleep 10
+          done
+          {
+            echo "### Deployed \`${GITHUB_SHA::7}\` to $SITE_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
