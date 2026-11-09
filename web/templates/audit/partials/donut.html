@@ -1,0 +1,18 @@
+{# A donut with its legend: every segment is named with its count and share, so the chart #}
+{# is a picture of the list, not the only place the figures are. #}
+<div class="flex flex-col items-center gap-5 @md:flex-row">
+  <div class="relative w-full max-w-[200px] shrink-0">
+    <div data-chart="{{ chart }}"></div>
+    <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+      <span class="text-2xl font-semibold tabular-nums">{{ total }}</span><span class="text-xs text-muted">{{ centre }}</span>
+    </div>
+  </div>
+  <ul class="legend-list w-full">
+    {% for s in segments %}
+    <li><span class="legend-dot" style="background: var(--{{ s.color }})"></span>
+      <span class="min-w-0 flex-1">{{ s.label }}</span>
+      <span class="font-medium tabular-nums">{{ s.reports }}</span>
+      <span class="w-12 text-right text-[13px] text-muted tabular-nums">{{ s.pct }}</span></li>
+    {% endfor %}
+  </ul>
+</div>

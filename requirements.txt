@@ -1,0 +1,30 @@
+# Minimum versions, not exact pins: this local venv runs Python 3.13, and many exact
+# versions that would be reasonable Colab pins (Colab is typically Python 3.10/3.11)
+# don't have prebuilt wheels for 3.13 yet, forcing slow/fragile from-source builds.
+# Once training actually runs on Colab, capture the exact resolved versions there via
+# `pip freeze` (see docs/environment.md) and pin those for reproducibility — these
+# ranges are for local dev/testing only.
+pandas>=2.2.3
+pyarrow>=17.0.0   # parquet read/write support for pandas
+numpy>=2.0
+scikit-learn>=1.5.2
+torch>=2.5.0
+# Local dev note: plain PyPI `torch` on Linux is the CUDA build and expects separate
+# nvidia-cu* runtime packages (large, and useless on a machine with no discrete GPU —
+# see docs/environment.md). Install the CPU-only build locally instead:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+# Colab already ships a CUDA-enabled torch matching its assigned runtime — don't
+# override it there.
+transformers>=4.45.0
+peft>=0.13.0
+shap>=0.46.0
+requests>=2.32.3
+huggingface_hub>=0.25.0,<2   # 2.x drops InferenceClient.text_generation, used by narrative_generator (#53)
+python-dotenv>=1.0.1
+openai>=1.40.0
+PyYAML>=6.0.2
+pytest>=8.3.2
+pytest-mock>=3.14.0
+
+# Colab only, for stage B note synthesis (src/data/note_synthesis.py): vllm==0.19.0. Not
+# listed here because it needs a CUDA GPU; the notebook installs it.

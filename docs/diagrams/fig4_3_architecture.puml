@@ -1,0 +1,63 @@
+@startuml
+' Figure 4.3: System Architecture Diagram (Django platform, 26 Oct 2026)
+skinparam shadowing false
+skinparam linetype polyline
+skinparam nodesep 40
+skinparam ranksep 50
+skinparam ArrowColor black
+skinparam componentBackgroundColor white
+skinparam componentBorderColor black
+skinparam databaseBackgroundColor white
+skinparam databaseBorderColor black
+skinparam nodeBackgroundColor #f4f6f9
+skinparam nodeBorderColor black
+skinparam cloudBackgroundColor white
+skinparam cloudBorderColor black
+skinparam actorBorderColor black
+skinparam actorBackgroundColor white
+skinparam queueBackgroundColor white
+skinparam queueBorderColor black
+
+actor "Fraud Auditor /\nAdministrator" as User
+
+node "Web application (Docker container or workstation)" as WebNode {
+  component "Django web application\n(pages, admin site, allauth,\nupload validation, batch summary)" as Web
+}
+
+cloud "Google\n(OpenID Connect)" as Google
+database "PostgreSQL\n(Neon, hosted)\nusers, batches, claims, verdicts,\nreports, decisions, jobs, activity log" as DB
+queue "Redis job queue\n(Upstash, hosted)\nqueues: cpu, gpu" as Redis
+
+node "Local CPU worker (workstation)" as CPUNode {
+  component "Celery worker\n(queue cpu)\nAudit pipeline\nwithout narratives" as CPUWorker
+}
+
+node "Colab GPU worker (notebook 05)" as GPUNode {
+  component "Celery worker\n(queue gpu)\nAudit pipeline\nwith narratives" as GPUWorker
+  component "Narrative LLM\n(Llama 3.1 8B on vLLM)" as LLM
+}
+
+node "Google Drive (model and data store)" as Drive {
+  component "Datasets, active classifier\n(LoRA adapter), ICD-11 cache,\nFeedback Dataset, run logs" as Store
+}
+
+component "WHO ICD-11 API\n(self-hosted container)" as ICD
+node "Google Colab training\n(notebooks 01-04)" as Train
+
+User --> Web : HTTPS
+Web --> Google : sign-in redirect
+Web --> DB : read / write
+Web --> Redis : enqueue job
+Redis --> CPUWorker : job
+Redis --> GPUWorker : job
+CPUWorker --> DB : verdicts, reports,\nprogress
+GPUWorker --> DB : verdicts, reports,\nprogress
+GPUWorker --> LLM : inconsistent\nclaims only
+CPUWorker --> Store : read model,\ncache, training split
+GPUWorker --> Store : read
+Web --> Store : write feedback examples;\nread metrics
+ICD --> Store : fill cache\n(once per code list)
+Train --> Store : train, retrain,\npromote classifier
+Google -[hidden]right- Redis
+ICD -[hidden]right- Train
+@enduml

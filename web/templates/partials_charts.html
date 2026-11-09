@@ -1,0 +1,7 @@
+{% load static %}
+{# vega-embed renders every element with data-chart from its json_script specification. #}
+{# Vendored (npm run vendor), so charts work without a CDN. #}
+<script src="{% static 'vendor/vega.min.js' %}"></script>
+<script src="{% static 'vendor/vega-lite.min.js' %}"></script>
+<script src="{% static 'vendor/vega-embed.min.js' %}"></script>
+<script src="{% static 'js/charts.js' %}"></script>

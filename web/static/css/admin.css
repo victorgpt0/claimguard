@@ -1,0 +1,77 @@
+/* Django admin recoloured with ClaimGuard's design tokens (static/src/app.css): the same
+   surfaces, hairlines, near-black primary and orange accent, in light and dark. Only the
+   admin's own CSS variables are set, so its layout and widgets are untouched. */
+@font-face {
+  font-family: "Inter Variable"; font-style: normal; font-display: swap; font-weight: 100 900;
+  src: url("../vendor/inter-latin-wght-normal.woff2") format("woff2-variations");
+}
+
+html[data-theme="light"], :root {
+  --font-family-primary: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --primary: #0f1115; --secondary: #0f1115; --accent: #f26b1d; --primary-fg: #fff;
+  --body-fg: #0f1115; --body-bg: #fff; --body-quiet-color: #6b6f78; --body-medium-color: #3f434b;
+  --body-loud-color: #0f1115;
+  --header-color: #6b6f78; --header-branding-color: #0f1115; --header-bg: #fff; --header-link-color: #0f1115;
+  --breadcrumbs-fg: #6b6f78; --breadcrumbs-link-fg: #0f1115; --breadcrumbs-bg: #f8f8f9;
+  --link-fg: #0b6bcb; --link-hover-color: #0f1115; --link-selected-fg: #f26b1d;
+  --hairline-color: #e8e8eb; --border-color: #d6d6db;
+  --error-fg: #d92d20; --message-success-bg: #ecfbf2; --message-warning-bg: #fff7e6; --message-error-bg: #fef1f0;
+  --darkened-bg: #f8f8f9; --selected-bg: #f1f1f3; --selected-row: #fff1e8;
+  --button-fg: #fff; --button-bg: #0f1115; --button-hover-bg: #2a2d34;
+  --default-button-bg: #0f1115; --default-button-hover-bg: #2a2d34;
+  --close-button-bg: #6b6f78; --close-button-hover-bg: #3f434b;
+  --delete-button-bg: #d92d20; --delete-button-hover-bg: #b42318;
+  --object-tools-fg: #fff; --object-tools-bg: #0f1115; --object-tools-hover-bg: #2a2d34;
+}
+@media (prefers-color-scheme: dark) {
+  :root { color-scheme: dark; }
+  :root:not([data-theme="light"]) {
+    --primary: #f2f3f5; --secondary: #181a1f; --accent: #ff8a3d; --primary-fg: #0f1115;
+    --body-fg: #f2f3f5; --body-bg: #131418; --body-quiet-color: #9aa0ab; --body-medium-color: #c4c8cf;
+    --body-loud-color: #fff;
+    --header-color: #9aa0ab; --header-branding-color: #f2f3f5; --header-bg: #131418; --header-link-color: #f2f3f5;
+    --breadcrumbs-fg: #9aa0ab; --breadcrumbs-link-fg: #f2f3f5; --breadcrumbs-bg: #181a1f;
+    --link-fg: #79b8ff; --link-hover-color: #f2f3f5; --link-selected-fg: #ff8a3d;
+    --hairline-color: #24262d; --border-color: #33363f;
+    --error-fg: #ff7b72; --message-success-bg: #10291c; --message-warning-bg: #2f2210; --message-error-bg: #33171a;
+    --darkened-bg: #181a1f; --selected-bg: #1e2026; --selected-row: #2e1b0f;
+    --button-fg: #0f1115; --button-bg: #f2f3f5; --button-hover-bg: #d6d8dc;
+    --default-button-bg: #f2f3f5; --default-button-hover-bg: #d6d8dc;
+    --close-button-bg: #33363f; --close-button-hover-bg: #4a4e58;
+    --delete-button-bg: #d92d20; --delete-button-hover-bg: #b42318;
+    --object-tools-fg: #0f1115; --object-tools-bg: #f2f3f5; --object-tools-hover-bg: #d6d8dc;
+  }
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --primary: #f2f3f5; --secondary: #181a1f; --accent: #ff8a3d; --primary-fg: #0f1115;
+  --body-fg: #f2f3f5; --body-bg: #131418; --body-quiet-color: #9aa0ab; --body-medium-color: #c4c8cf;
+  --body-loud-color: #fff;
+  --header-color: #9aa0ab; --header-branding-color: #f2f3f5; --header-bg: #131418; --header-link-color: #f2f3f5;
+  --breadcrumbs-fg: #9aa0ab; --breadcrumbs-link-fg: #f2f3f5; --breadcrumbs-bg: #181a1f;
+  --link-fg: #79b8ff; --link-hover-color: #f2f3f5; --link-selected-fg: #ff8a3d;
+  --hairline-color: #24262d; --border-color: #33363f;
+  --error-fg: #ff7b72; --message-success-bg: #10291c; --message-warning-bg: #2f2210; --message-error-bg: #33171a;
+  --darkened-bg: #181a1f; --selected-bg: #1e2026; --selected-row: #2e1b0f;
+  --button-fg: #0f1115; --button-bg: #f2f3f5; --button-hover-bg: #d6d8dc;
+  --default-button-bg: #f2f3f5; --default-button-hover-bg: #d6d8dc;
+  --close-button-bg: #33363f; --close-button-hover-bg: #4a4e58;
+  --delete-button-bg: #d92d20; --delete-button-hover-bg: #b42318;
+  --object-tools-fg: #0f1115; --object-tools-bg: #f2f3f5; --object-tools-hover-bg: #d6d8dc;
+}
+
+body { -webkit-font-smoothing: antialiased; }
+#header { border-bottom: 1px solid var(--hairline-color); padding-block: 14px; }
+#site-name a { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; }
+.cg-logo { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
+  border-radius: 10px; background: var(--primary); color: var(--primary-fg); }
+div.breadcrumbs { border-bottom: 1px solid var(--hairline-color); }
+.module, #changelist .changelist-form-container, .inline-group { border-radius: 14px; }
+.module h2, .module caption, .inline-group h2 { background: var(--darkened-bg); color: var(--body-fg);
+  border-bottom: 1px solid var(--hairline-color); font-weight: 600; text-transform: none; letter-spacing: 0; }
+.module { border: 1px solid var(--hairline-color); overflow: hidden; }
+.button, input[type=submit], input[type=button], .submit-row input, a.button { border-radius: 10px; }
+input[type=text], input[type=password], input[type=email], input[type=url], input[type=number],
+input[type=search], select, textarea { border-radius: 10px; }
+#nav-sidebar .current-model { background: var(--selected-row); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

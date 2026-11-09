@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% load lucide %}
+{% block head_title %}Feedback loop{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Feedback loop</h1><p>Auditor decisions become labelled examples; enough of them trigger a retraining run.</p></div></div>
+{% if not trigger %}
+<section class="card"><div class="empty-state">
+  <span class="kpi-icon size-12 bg-warn-soft text-warn">{% lucide "refresh-ccw" size=22 %}</span>
+  <h2>Pipeline settings are missing</h2><p>The retraining trigger comes from <code>config/config.yaml</code>.</p>
+</div></section>
+{% else %}
+<div class="mb-5 grid gap-4 sm:grid-cols-3">
+  <div class="kpi"><span class="kpi-label">Feedback examples</span><span class="kpi-value">{{ total }}</span><span class="kpi-note">All time</span></div>
+  <div class="kpi"><span class="kpi-label">Since last retraining</span><span class="kpi-value">{{ unconsumed }}</span>
+    <div class="progress" role="progressbar" aria-label="Examples toward the next retraining" aria-valuenow="{{ progress }}" aria-valuemin="0" aria-valuemax="100"><span style="width: {{ progress }}%"></span></div>
+    <span class="kpi-note">{{ unconsumed }} of {{ trigger }} toward the next retraining</span></div>
+  <div class="kpi"><span class="kpi-label">Retraining trigger</span><span class="kpi-value">{{ trigger }}</span><span class="kpi-note">Set in config.yaml</span></div>
+</div>
+{% if due %}<p class="notice notice-warn">{% lucide "triangle-alert" size=16 %}<span>Retraining due: run <code>python -m src.feedback.run_retraining</code> on Colab. It trains a candidate on the training split plus this feedback and promotes it only if it scores at least as well on the held-out test set (FR-14).</span></p>{% endif %}
+<p class="caption">Approve and reject decisions become labelled examples for the classifier: a rejection is labelled consistent, an approval of an inconsistent verdict inconsistent. Approving a consistent verdict and escalating add nothing.</p>
+
+<section class="card"><h2>Retraining history</h2>
+{% if history %}<div class="table-wrap"><table class="list"><thead><tr><th>Run</th><th>Checkpoint</th><th class="num">Examples</th><th class="num">Candidate F1</th><th class="num">Candidate recall</th><th class="num">Active F1</th><th>Promoted</th></tr></thead>
+<tbody>{% for row in history %}<tr><td>{{ row.run_at|slice:":16" }}</td><td>{{ row.checkpoint }}</td><td class="num">{{ row.feedback_examples }}{% if row.simulated_examples %} ({{ row.simulated_examples }} simulated){% endif %}</td>
+<td class="num">{{ row.candidate_metrics.f1|floatformat:3 }}</td><td class="num">{{ row.candidate_metrics.recall|floatformat:3 }}</td><td class="num">{{ row.active_metrics.f1|floatformat:3 }}</td><td>{% if row.promoted %}<span class="badge status-succeeded">Promoted</span>{% else %}<span class="badge">Kept active</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+<p class="caption mt-3 mb-0">F1 and recall on the held-out test set, the promotion gate (FR-14).</p>
+{% else %}<p class="caption mb-0">No retraining run yet.</p>{% endif %}</section>
+
+{% if examples %}<section class="card"><h2>Latest feedback examples</h2>
+<div class="table-wrap"><table class="list"><thead><tr><th>Claim</th><th>Code</th><th>Verdict</th><th>Decision</th><th>Label</th></tr></thead>
+<tbody>{% for e in examples %}<tr><td>{{ e.claim_id }}</td><td>{{ e.icd11_code }}</td><td>{{ e.classifier_verdict }}</td><td>{{ e.auditor_decision }}{% if e.simulated %} (simulated){% endif %}</td><td>{{ e.label }}</td></tr>{% endfor %}</tbody></table></div>
+</section>{% endif %}
+{% endif %}
+{% endblock %}

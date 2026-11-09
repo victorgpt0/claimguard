@@ -1,0 +1,25 @@
+{
+  "dependencies": {
+    "@neon/config": "^1.9.4",
+    "@neon/env": "^1.6.5"
+  },
+  "devDependencies": {
+    "@alpinejs/collapse": "^3.17.5",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@tailwindcss/cli": "^4.3.3",
+    "@tailwindcss/forms": "^0.5.11",
+    "alpinejs": "^3.17.5",
+    "htmx.org": "2.0.4",
+    "tailwindcss": "^4.3.3",
+    "vega": "5.30.0",
+    "vega-embed": "6.26.0",
+    "vega-lite": "5.21.0"
+  },
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i web/static/src/app.css -o web/static/css/app.css --minify",
+    "watch:css": "tailwindcss -i web/static/src/app.css -o web/static/css/app.css --watch --minify",
+    "vendor": "mkdir -p web/static/vendor && cp node_modules/alpinejs/dist/cdn.min.js web/static/vendor/alpine.min.js && cp node_modules/@alpinejs/collapse/dist/cdn.min.js web/static/vendor/alpine-collapse.min.js && cp node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2 web/static/vendor/ && cp node_modules/vega/build/vega.min.js node_modules/vega-lite/build/vega-lite.min.js node_modules/vega-embed/build/vega-embed.min.js node_modules/htmx.org/dist/htmx.min.js web/static/vendor/ && sed -i '/^\\/\\/# sourceMappingURL=/d' web/static/vendor/vega*.min.js",
+    "build": "npm run vendor && npm run build:css"
+  }
+}

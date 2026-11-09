@@ -1,0 +1,60 @@
+@startuml
+' Sequence diagram: upload a claims batch and process it on a worker (26 Oct 2026)
+skinparam shadowing false
+skinparam ArrowColor black
+skinparam sequenceParticipantBackgroundColor white
+skinparam sequenceParticipantBorderColor black
+skinparam sequenceLifeLineBorderColor #777777
+skinparam actorBackgroundColor white
+skinparam actorBorderColor black
+skinparam databaseBackgroundColor white
+skinparam databaseBorderColor black
+skinparam queueBackgroundColor white
+skinparam queueBorderColor black
+autonumber
+
+actor "Fraud Auditor" as A
+participant "Django\nweb application" as W
+participant "UploadValidator" as V
+database "PostgreSQL" as DB
+queue "Redis\n(cpu / gpu queue)" as Q
+participant "Celery worker\n(process_batch)" as T
+participant "AuditPipeline" as P
+
+A -> W : upload CSV, confirm synthetic data
+W -> DB : read existing claim ids
+W -> V : validate(frame, known codes,\nexisting ids, held-out ids)
+alt any problem
+  V --> W : problems (line, column, message)
+  W -> DB : ActivityLog(upload rejected)
+  W --> A : every problem listed; nothing stored
+else file valid
+  V --> W : no problems
+  W -> DB : Batch(status uploaded, source CSV, SHA-256)\n+ Claims (one transaction)
+  W -> DB : ActivityLog(upload)
+  W --> A : batch page
+  A -> W : start processing (queue cpu or gpu)
+  W -> DB : Job(status queued); ActivityLog(job started)
+  W -> Q : process_batch(job id)\n(after the transaction commits)
+  W --> A : batch page with progress bar
+  loop every 2 s until the job ends
+    A -> W : poll progress
+    W -> DB : read Job
+    W --> A : stage, done / total
+  end
+  Q -> T : process_batch(job id)
+  T -> DB : Job running; Batch processing
+  T -> P : run(claims from source CSV, settings, progress)
+  P -> DB : verdicts and audit reports\n(through DjangoAuditRepository)
+  P -> T : progress(stage, done, total)
+  T -> DB : Job stage, done, total
+  alt run succeeds
+    P --> T : RunLog
+    T -> DB : Batch processed, run log;\nJob succeeded
+    W --> A : batch summary (HTTP 286 stops polling)
+  else run fails
+    T -> DB : delete the batch's partial verdicts and reports;\nJob and Batch failed with the error
+    W --> A : failure shown; batch can be restarted
+  end
+end
+@enduml

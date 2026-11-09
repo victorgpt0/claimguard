@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load socialaccount lucide %}
+{# A signed-in user connects their own Google account, after which "Sign in with Google" #}
+{# works for them without the Administrator linking it (accounts/adapters.py). #}
+{% block head_title %}Google sign-in{% endblock %}
+{% block content %}
+<h1>Google sign-in</h1>
+<section class="card max-w-2xl">
+  <p class="caption">Connect your Google account once; after that you can use <strong>Sign in with Google</strong> on the sign-in page instead of your password. Your password keeps working.</p>
+
+  {% if form.non_field_errors %}<p class="warning">{% for e in form.non_field_errors %}{{ e }} {% endfor %}</p>{% endif %}
+
+  {% if form.accounts %}
+    <form method="post" action="{% url 'socialaccount_connections' %}" class="space-y-3">
+      {% csrf_token %}
+      {% for account in form.accounts %}
+      <div class="panel flex flex-wrap items-center gap-3">
+        {% include "partials/google_logo.html" with size=22 %}
+        <div class="min-w-0 flex-1">
+          <div class="truncate font-medium">{{ account.extra_data.email|default:account.uid }}</div>
+          <div class="text-xs text-muted">Connected {{ account.date_joined|date:"Y-m-d" }}</div>
+        </div>
+        <span class="badge status-succeeded">{% lucide "circle-check" size=13 %} Connected</span>
+        <button name="account" value="{{ account.pk }}" class="btn">{% lucide "unlink" size=16 %} Remove</button>
+      </div>
+      {% endfor %}
+    </form>
+  {% else %}
+    {% get_providers as socialaccount_providers %}
+    {% for provider in socialaccount_providers %}{% if provider.id == "google" %}
+    <form method="post" action="{% provider_login_url 'google' process='connect' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn">
+        {% include "partials/google_logo.html" with size=18 %}
+        Connect Google account
+      </button>
+    </form>
+    {% endif %}{% empty %}
+    <p class="info">Google sign-in is not configured on this server (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET).</p>
+    {% endfor %}
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% load lucide %}
+{% block head_title %}Overview{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Overview</h1>
+    <p>Claims the pipeline flagged for post-payment audit, and where their review stands.</p>
+  </div>
+  <div class="flex flex-wrap gap-2">
+    {% if user.is_auditor %}
+      <a class="btn" href="{% url 'audit:upload' %}">{% lucide "upload" size=16 %} Upload batch</a>
+      {% if total %}<a class="btn-primary" href="{% url 'audit:queue' %}">{% lucide "inbox" size=16 %} Open review queue</a>{% endif %}
+    {% elif user.is_administrator %}
+      <a class="btn" href="{% url 'audit:feedback' %}">{% lucide "refresh-ccw" size=16 %} Feedback loop</a>
+      <a class="btn-primary" href="{% url 'audit:model' %}">{% lucide "gauge" size=16 %} Model performance</a>
+    {% endif %}
+  </div>
+</div>
+
+{% if not total %}
+  {# Empty state: say why and what to do next, per role. #}
+  <section class="card flex flex-col items-center gap-3 py-12 text-center">
+    <span class="kpi-icon size-12 bg-accent-soft text-accent">{% lucide "inbox" size=22 %}</span>
+    <h2 class="mb-0 justify-center">No audit reports yet</h2>
+    <p class="m-0 max-w-md text-sm text-muted">Reports appear here once a claims batch has been through the pipeline.
+      {% if user.is_auditor %}Upload a batch to start.{% else %}A Fraud Auditor uploads batches; nothing needs doing here until then.{% endif %}</p>
+    {% if user.is_auditor %}<a class="btn-primary" href="{% url 'audit:upload' %}">{% lucide "upload" size=16 %} Upload batch</a>{% endif %}
+  </section>
+{% else %}
+  <div class="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    {% for k in kpis %}
+    <div class="kpi">
+      <div class="flex items-center justify-between gap-3">
+        <span class="kpi-label">{{ k.label }}</span>
+        <span class="kpi-icon {{ k.tone }}" aria-hidden="true">{% lucide k.icon size=18 %}</span>
+      </div>
+      <span class="kpi-value">{{ k.value }}</span>
+      {% if "progress" in k %}<div class="progress" role="progressbar" aria-label="Reports reviewed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{% widthratio k.progress 1 100 %}"><span style="width: {% widthratio k.progress 1 100 %}%"></span></div>{% endif %}
+      <span class="kpi-note">{{ k.note }}</span>
+    </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<div class="grid gap-5 lg:grid-cols-6">
+  {% if run %}
+  <section class="card !mb-0 {% if total %}lg:col-span-4{% else %}lg:col-span-6{% endif %}">
+    <div class="card-head">
+      <div><h2>Latest pipeline run</h2>
+        <p>Started {{ run.started_at|slice:":16" }} UTC, batch of {{ run.summary.claims }} claims.</p></div>
+      <span class="badge">{% lucide "workflow" size=13 %} Deployment pool</span>
+    </div>
+    <div class="space-y-4">
+      {% for s in stages %}
+      <div class="stage">
+        <div class="min-w-0"><span class="font-medium">{{ s.label }}</span> <span class="text-[13px] text-muted">· {{ s.detail }}</span></div>
+        <div class="text-right tabular-nums"><span class="font-semibold">{{ s.claims }}</span>{% if s.pct and not forloop.first %} <span class="text-[13px] text-muted">{{ s.pct }}</span>{% endif %}</div>
+        <div class="stage-bar"><span style="width: {{ s.width }}%; background: var(--{{ s.color }})"></span></div>
+      </div>
+      {% endfor %}
+    </div>
+    {% if run.summary.reported %}
+    <p class="caption mt-4 mb-0">Queued for review: {{ run.summary.reported.text_inconsistent }} text inconsistent,
+      {{ run.summary.reported.structural_anomaly }} structural anomaly; {{ run.summary.screen_false_positives|default:0 }}
+      text-screen flags the classifier cleared were logged only.</p>{% endif %}
+    {% if charts.typology %}
+    <details class="mt-4 rounded-xl border border-line p-4">
+      <summary class="cursor-pointer text-sm font-medium">Stage-1 recall by fraud typology</summary>
+      <div class="mt-3" data-chart="chart-typology"></div>
+      <p class="caption mb-0">Stage-1 recall {{ run.evaluation.stage1_recall|floatformat:2 }}. Ground truth exists only because the data is synthetic.</p>
+    </details>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if total %}
+  <section class="card !mb-0 @container {% if run %}lg:col-span-2{% else %}lg:col-span-3{% endif %}">
+    <div class="card-head"><div><h2>Review status</h2><p>Decisions auditors have recorded.</p></div></div>
+    {% include "audit/partials/donut.html" with chart="chart-status" segments=status_segments total=total centre="reports" %}
+  </section>
+
+  <section class="card !mb-0 @container {% if run %}lg:col-span-2{% else %}lg:col-span-3{% endif %}">
+    <div class="card-head"><div><h2>Classifier verdicts</h2><p>Do the clinical notes support the billed ICD-11 code?</p></div></div>
+    {% include "audit/partials/donut.html" with chart="chart-verdicts" segments=verdict_segments total=total centre="reports" %}
+  </section>
+
+  <section class="card !mb-0 {% if run %}lg:col-span-4{% else %}lg:col-span-6{% endif %}">
+    <div class="card-head"><div><h2>Anomaly scores of flagged claims</h2><p>Isolation Forest score: higher is more anomalous.</p></div></div>
+    <div data-chart="chart-scores"></div>
+  </section>
+
+  {% if next_up %}
+  <section class="card !mb-0 lg:col-span-4">
+    <div class="card-head">
+      <div><h2>Next in the queue</h2><p>Pending reports with the highest anomaly scores.</p></div>
+      <a class="btn-ghost" href="{% url 'audit:queue' %}">View all {% lucide "arrow-right" size=15 %}</a>
+    </div>
+    <table class="list">
+      <thead><tr><th>Claim</th><th>Lane</th><th>Provider</th><th>ICD-11</th><th class="num">Score</th></tr></thead>
+      <tbody>{% for r in next_up %}
+        <tr><td><a href="{% url 'audit:report' r.pk %}">{{ r.claim.claim_ref }}</a></td>
+          <td>{% include "audit/lane_badge.html" with lane=r.lane %}</td>
+          <td>{{ r.claim.provider_id }}</td><td><code>{{ r.claim.icd11_code }}</code></td>
+          <td class="num">{{ r.claim.anomaly_score|floatformat:3 }}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+  </section>
+  {% endif %}
+
+  <section class="card !mb-0 {% if next_up %}lg:col-span-2{% else %}lg:col-span-3{% endif %}">
+    <div class="card-head"><div><h2>Why claims were flagged</h2><p>How often each feature is among a claim's top 3 SHAP attributions.</p></div></div>
+    <div data-chart="chart-shap"></div>
+  </section>
+
+  <section class="card !mb-0 lg:col-span-3">
+    <div class="card-head"><div><h2>Providers with the most flagged claims</h2><p>Top 10 by number of flagged claims.</p></div></div>
+    <div data-chart="chart-providers"></div>
+  </section>
+
+  <section class="card !mb-0 {% if next_up %}lg:col-span-3{% else %}lg:col-span-6{% endif %}">
+    <div class="card-head"><div><h2>Flagged amount by ICD-11 code</h2><p>Top 10 codes by amount under audit (KES).</p></div></div>
+    <div data-chart="chart-codes"></div>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
+{% block charts %}
+{% for name, spec in chart_specs.items %}{{ spec|json_script:name }}{% endfor %}
+{% if chart_specs %}{% include "partials_charts.html" %}{% endif %}
+{% endblock %}

@@ -1,0 +1,179 @@
+# The production stack on the Oracle Cloud VM (deploy/README.md). Run from this directory:
+#   docker compose up -d --build
+# Values come from deploy/.env (made by scripts/03-configure.sh, never committed).
+#
+# Published to the internet: 443 (Caddy, Cloudflare's addresses only, enforced in the
+# Caddyfile), 5432 and 6380 (PostgreSQL and Redis over TLS, for the Colab GPU worker).
+# Everything else talks over the internal network only.
+name: claimguard
+
+x-app-env: &app-env
+  DJANGO_DEBUG: "false"
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?run scripts/03-configure.sh}
+  DJANGO_ALLOWED_HOSTS: ${DOMAIN},www.${DOMAIN}
+  DJANGO_CSRF_TRUSTED_ORIGINS: https://${DOMAIN},https://www.${DOMAIN}
+  DATABASE_URL: postgres://claimguard:${POSTGRES_PASSWORD}@db:5432/claimguard
+  REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+  SHA_CDP_URL: http://sha-cdp:8100
+  SHA_CDP_API_KEY: ${SHA_CDP_API_KEY}
+  SHA_CDP_ADMIN_TOKEN: ${SHA_CDP_ADMIN_TOKEN}
+  SESSION_TIMEOUT_MINUTES: ${SESSION_TIMEOUT_MINUTES:-30}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  HF_TOKEN: ${HF_TOKEN:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  CLAIMGUARD_CONFIG: /app/config/config.yaml
+  MEDIA_ROOT: /app/media
+
+# The pipeline's files: config.yaml (made from config.example.yaml by 03-configure.sh, its
+# paths pointing at /srv/gdrive) and Google Drive, mounted on the host by rclone.
+x-app-volumes: &app-volumes
+  - ../config:/app/config:ro
+  - /srv/gdrive:/srv/gdrive
+  - media:/app/media
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  caddy:
+    <<: *restart
+    image: caddy:2.10
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      CF_IPS: ${CF_IPS:?run scripts/04-cloudflare-ips.sh}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./origin:/certs:ro               # the Cloudflare Origin Certificate (README, step 5)
+      - caddy_data:/data
+    depends_on: [web]
+    mem_limit: 256m
+
+  db:
+    <<: *restart
+    # 18, the same major version as the Neon project, so its dump restores directly.
+    image: postgres:18
+    command: >
+      postgres -c ssl=on -c ssl_cert_file=/tls/server.crt -c ssl_key_file=/tls/server.key
+               -c hba_file=/etc/postgresql/pg_hba.conf -c password_encryption=scram-sha-256
+    environment:
+      POSTGRES_DB: claimguard
+      POSTGRES_USER: claimguard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run scripts/03-configure.sh}
+      SHA_CDP_DB_PASSWORD: ${SHA_CDP_DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql        # the 18 image keeps PGDATA in a versioned folder here
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./postgres/init-sha-cdp.sh:/docker-entrypoint-initdb.d/10-sha-cdp.sh:ro
+      - ./tls:/tls:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U claimguard -d claimguard"]
+      interval: 5s
+      retries: 20
+    mem_limit: 1536m
+
+  redis:
+    <<: *restart
+    image: redis:7.4
+    # 6379 plain, inside the network only; 6380 TLS, published for the Colab worker. Both need
+    # the password. appendonly keeps queued jobs across a restart.
+    command: >
+      redis-server --requirepass ${REDIS_PASSWORD:?run scripts/03-configure.sh}
+                   --port 6379 --tls-port 6380
+                   --tls-cert-file /tls/server.crt --tls-key-file /tls/server.key
+                   --tls-ca-cert-file /tls/ca.crt --tls-auth-clients no
+                   --appendonly yes
+    ports:
+      - "6380:6380"
+    volumes:
+      - redisdata:/data
+      - ./tls:/tls:ro
+    mem_limit: 512m
+
+  web:
+    <<: *restart
+    build: {context: .., target: web}
+    image: claimguard-web
+    environment: *app-env
+    volumes: *app-volumes
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_started}
+    mem_limit: 1536m
+
+  # The simulated SHA claims platform (#65): reachable only inside the network, by the web
+  # application and the ingest worker. Load claims once:
+  #   docker compose run --rm sha-cdp python -m sha_cdp.seed /srv/gdrive/claimguard/data/<feed>.parquet
+  sha-cdp:
+    <<: *restart
+    build: {context: .., target: web}
+    image: claimguard-web
+    command: uvicorn sha_cdp.app:app --host 0.0.0.0 --port 8100
+    environment:
+      SHA_CDP_DATABASE_URL: postgresql://sha_cdp:${SHA_CDP_DB_PASSWORD}@db:5432/sha_cdp
+      SHA_CDP_API_KEY: ${SHA_CDP_API_KEY}
+      SHA_CDP_ADMIN_TOKEN: ${SHA_CDP_ADMIN_TOKEN}
+    volumes:
+      - /srv/gdrive:/srv/gdrive:ro
+    depends_on:
+      db: {condition: service_healthy}
+    mem_limit: 512m
+
+  # The claims feed: pulls from sha-cdp on the beat schedule (#66). Needs only the web group.
+  worker-ingest:
+    <<: *restart
+    build: {context: .., target: web}
+    image: claimguard-web
+    command: >
+      celery --workdir web -A claimguard_web worker -Q ingest -c 1 -n ingest@%h -B
+             --schedule /var/lib/celery/beat-schedule -l INFO
+    environment: *app-env
+    volumes:
+      - ../config:/app/config:ro
+      - /srv/gdrive:/srv/gdrive
+      - media:/app/media
+      - celerybeat:/var/lib/celery
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_started}
+      web: {condition: service_started}   # web runs the migrations
+    mem_limit: 768m
+
+  # Batch jobs on the "cpu" queue: stage 1, SHAP and the classifier, no narratives (those
+  # need the "gpu" queue, the Colab worker). The base model is downloaded once into hf_cache.
+  worker-cpu:
+    <<: *restart
+    build: {context: .., target: worker}
+    image: claimguard-worker
+    environment:
+      <<: *app-env
+      HF_HOME: /cache/huggingface
+    volumes:
+      - ../config:/app/config:ro
+      - /srv/gdrive:/srv/gdrive
+      - media:/app/media
+      - hf_cache:/cache/huggingface
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_started}
+      web: {condition: service_started}
+    mem_limit: 4g
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24   # pg_hba.conf trusts this range without TLS; nothing else
+
+volumes:
+  pgdata:
+  redisdata:
+  media:
+  caddy_data:
+  celerybeat:
+  hf_cache:

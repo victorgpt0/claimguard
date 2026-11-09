@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% load lucide %}
+{% block head_title %}Batches{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Batches</h1><p>Uploaded claims files, their processing status and summaries.</p></div>
+  {% if user.is_auditor %}<a class="btn-primary" href="{% url 'audit:upload' %}">{% lucide "upload" size=16 %} Upload a claims batch</a>{% endif %}
+</div>
+<section class="card">
+{% if batches %}
+  <div class="table-wrap">
+  <table class="list">
+    <caption class="sr-only">Claims batches, newest first</caption>
+    <thead><tr><th scope="col">Batch</th><th scope="col">Name</th><th scope="col">Status</th><th scope="col" class="num">Claims</th><th scope="col">Uploaded by</th><th scope="col">Uploaded</th></tr></thead>
+    <tbody>{% for b in batches %}<tr><td><a href="{% url 'audit:batch' b.pk %}">#{{ b.pk }}</a></td><td>{{ b.name }}</td>
+      <td><span class="badge status-{{ b.status }}">{{ b.get_status_display|capfirst }}</span></td><td class="num">{{ b.claims_count }}</td>
+      <td>{{ b.uploaded_by.username|default:"—" }}</td><td>{{ b.uploaded_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+{% else %}
+  <div class="empty-state">
+    <span class="kpi-icon size-12 bg-accent-soft text-accent">{% lucide "layers" size=22 %}</span>
+    <h2>No batches yet</h2>
+    <p>{% if user.is_auditor %}Upload a CSV of claims; every line is checked before anything is stored.{% else %}A Fraud Auditor uploads claims batches; they will be listed here.{% endif %}</p>
+    {% if user.is_auditor %}<a class="btn-primary" href="{% url 'audit:upload' %}">{% lucide "upload" size=16 %} Upload a claims batch</a>{% endif %}
+  </div>
+{% endif %}
+</section>
+{% endblock %}

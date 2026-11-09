@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% load lucide %}
+{# allauth's pages (change password, Google, sign out) fill "content": a centred card, under #}
+{# the app shell when signed in and under the logo when signed out. #}
+{% block body %}
+{% if not user.is_authenticated %}
+<a href="{% url 'home' %}" class="mx-auto mt-4 mb-6 flex w-fit items-center gap-2.5 text-ink no-underline">
+  <span class="flex size-9 items-center justify-center rounded-xl bg-primary text-on-primary">{% lucide "shield-check" size=19 %}</span>
+  <span class="text-lg font-semibold">ClaimGuard</span></a>
+{% endif %}
+<section class="card mx-auto my-6 max-w-lg p-7">{% block content %}{% endblock %}</section>
+{% endblock %}

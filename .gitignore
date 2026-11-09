@@ -1,1 +1,58 @@
 venv/
+# local dev-only cache for manually-resumed pip wheel downloads
+.wheel_cache/
+*.whl
+# secrets — never commit these (research_writing.txt 5.2.2/5.5: never expose API keys,
+# tokens, or credentials in the repository; rotate immediately if one is ever committed)
+.env
+.env.local
+config/config.yaml
+
+# data and model artifacts — these live in Google Drive, not git (DR-05: generated data and
+# model checkpoints belong in a designated artifacts directory, separate from the operational
+# database, not in version control). Anchored to the repo root so src/data/ (pipeline
+# code) is still tracked.
+/data/
+*.sqlite
+*.sqlite3
+models/
+*.pt
+*.bin
+*.safetensors
+checkpoints/
+experiments/
+artifacts/
+
+# notebook/Python noise
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+*.egg-info/
+build/
+dist/
+
+# OS/editor noise
+.DS_Store
+.vscode/
+.idea/
+
+# Django application (web/)
+web/db.sqlite3
+web/staticfiles/
+media/
+.neon
+node_modules/
+
+# JUnit reports written by `pytest --junitxml` (CI keeps them as run artifacts)
+test-results/
+web/celerybeat-schedule*
+
+# Oracle deployment secrets, made on the VM (deploy/README.md); deploy/.env is covered by .env
+deploy/tls/
+deploy/ca-private/
+deploy/origin/
+deploy/*.dump
+deploy/.deploy-history

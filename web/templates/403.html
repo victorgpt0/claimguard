@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{% block head_title %}Not allowed{% endblock %}
+{% block content %}{% include "partials/error_page.html" with code=403 icon="lock" tone="bg-warn-soft text-warn" title="This page is not for your role" message="Fraud Auditors review claims; Administrators monitor the models and manage accounts. If you need this page, ask your Administrator to change your role." %}{% endblock %}

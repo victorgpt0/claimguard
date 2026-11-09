@@ -1,0 +1,14 @@
+.git
+.venv
+venv
+data
+models
+experiments
+artifacts
+media
+web/db.sqlite3
+web/staticfiles
+**/__pycache__
+.env
+config/config.yaml
+node_modules

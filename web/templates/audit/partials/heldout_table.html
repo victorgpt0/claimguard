@@ -1,0 +1,13 @@
+{# Held-out comparison: one row per system, the reference first and marked. #}
+<div class="table-wrap">
+<table class="list">
+  <thead><tr><th scope="col">System</th><th scope="col" class="num">Precision</th><th scope="col" class="num">Recall</th><th scope="col" class="num">F1 [95% CI]</th><th scope="col" class="num">FPR</th><th scope="col" class="num">McNemar p</th></tr></thead>
+  <tbody>{% for r in rows %}
+    <tr{% if r.reference %} class="font-medium"{% endif %}><td>{{ r.name }}{% if r.reference %} <span class="badge">reference</span>{% endif %}</td>
+      <td class="num">{{ r.precision|floatformat:3 }}</td><td class="num">{{ r.recall|floatformat:3 }}</td>
+      <td class="num">{{ r.f1|floatformat:3 }}{% if r.f1_ci %} <span class="text-muted">[{{ r.f1_ci.0|floatformat:3 }}, {{ r.f1_ci.1|floatformat:3 }}]</span>{% elif r.f1_std is not None %} <span class="text-muted">± {{ r.f1_std|floatformat:3 }}</span>{% endif %}</td>
+      <td class="num">{{ r.fpr|floatformat:3 }}</td>
+      <td class="num">{% if r.reference %}—{% elif r.p_value is not None %}{{ r.p_value|stringformat:".1e" }}{% else %}—{% endif %}</td></tr>
+  {% endfor %}</tbody>
+</table>
+</div>

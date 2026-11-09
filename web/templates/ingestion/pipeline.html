@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load static lucide %}
+{% block head_title %}Data pipeline{% endblock %}
+{% block extra_head %}<script src="{% static 'vendor/htmx.min.js' %}" defer></script>{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Data pipeline</h1>
+    <p>Claims arrive from SHA's claims platform once they are paid, are checked, and collect into one batch per
+      audit period ({{ feed_settings.audit_period }}). When a period ends, its batch goes through detection and the
+      flagged claims reach the review queue.</p>
+  </div>
+  <div class="controls">
+    <form method="post" action="{% url 'ingestion:sync' %}">{% csrf_token %}
+      <button class="btn-primary" type="submit">{% lucide "refresh-cw" size=16 %} Pull now</button></form>
+  </div>
+</div>
+
+<p class="notice notice-info">{% lucide "info" size=16 %}<span>The claims platform here is a <strong>simulation</strong> of SHA's
+  Centralized Digital Platform: a separate service with its own database, holding synthetic claims generated for this
+  study. ClaimGuard reaches it only through its read-only API, as it would reach SHA's. Its clock releases claims as
+  simulated time passes.</span></p>
+
+{% if user.is_administrator %}
+<section class="card">
+  <div class="card-head"><div><h2>Simulation controls</h2>
+    <p>Move the platform's clock to release the claims SHA paid in that time; each move is followed by a pull.
+      Scheduled pulls run every few seconds while the ingest worker is up{% if state.paused %}, but are <strong>paused</strong>{% endif %}.</p></div></div>
+  <div class="controls">
+    {% for value, label, icon in clock_buttons %}
+    <form method="post" action="{% url 'ingestion:clock' %}">{% csrf_token %}<input type="hidden" name="action" value="{{ value }}">
+      <button class="btn" type="submit">{% lucide icon size=16 %} {{ label }}</button></form>
+    {% endfor %}
+    <form method="post" action="{% url 'ingestion:toggle' %}">{% csrf_token %}
+      <button class="btn-ghost" type="submit">{% if state.paused %}{% lucide "circle-play" size=16 %} Resume scheduled pulls{% else %}{% lucide "circle-pause" size=16 %} Pause scheduled pulls{% endif %}</button></form>
+  </div>
+</section>
+{% endif %}
+
+<div aria-live="polite" hx-get="{% url 'ingestion:live' %}" hx-trigger="every 5s" hx-swap="innerHTML">
+  {% include "ingestion/live.html" %}
+</div>
+{% endblock %}

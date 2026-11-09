@@ -1,0 +1,229 @@
+/* ClaimGuard stylesheet source. Built by Tailwind into web/static/css/app.css:
+     npm run build:css     (once)        npm run watch:css     (while editing templates)
+   Design: light, quiet surfaces with hairline borders, near-black primary actions, warm
+   orange and sky-blue accents for data; a matching dark theme. Colours are tokens (below),
+   so templates use bg-surface / text-muted / border-line and both themes follow. */
+@import "tailwindcss";
+@plugin "@tailwindcss/forms";
+@source "../../templates";
+@source "../../audit";
+@source "../../accounts";
+@source "../js";
+
+/* Dark mode follows data-theme on <html>, set before paint by the script in base.html. */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../vendor/inter-latin-wght-normal.woff2") format("woff2-variations");
+}
+
+:root {
+  --canvas: #f4f4f5; --surface: #ffffff; --subtle: #f8f8f9; --hover: #f1f1f3; --line: #e8e8eb;
+  --line-strong: #d6d6db; --ink: #0f1115; --muted: #6b6f78; --faint: #9a9ea6;
+  --primary: #0f1115; --on-primary: #ffffff;
+  --accent: #f26b1d; --accent-soft: #fff1e8; --sky: #3aa8f0; --sky-soft: #eaf6fe;
+  --sun: #f4c331; --teal: #2bb5a0; --violet: #8b7cf6;
+  --red: #d92d20; --red-soft: #fef1f0; --green: #13914f; --green-soft: #ecfbf2;
+  --amber: #b45309; --amber-soft: #fff7e6; --blue: #0b6bcb; --blue-soft: #eef5fd;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 8px 24px -12px rgba(16, 24, 40, .10);
+  color-scheme: light;
+}
+[data-theme=dark] {
+  --canvas: #0a0b0d; --surface: #131418; --subtle: #181a1f; --hover: #1e2026; --line: #24262d;
+  --line-strong: #33363f; --ink: #f2f3f5; --muted: #9aa0ab; --faint: #6c717c;
+  --primary: #f2f3f5; --on-primary: #0f1115;
+  --accent: #ff8a3d; --accent-soft: #2e1b0f; --sky: #5bbcf7; --sky-soft: #0f2534;
+  --sun: #f7cf55; --teal: #3fd0b9; --violet: #a194ff;
+  --red: #ff7b72; --red-soft: #33171a; --green: #4ad991; --green-soft: #10291c;
+  --amber: #f5b454; --amber-soft: #2f2210; --blue: #79b8ff; --blue-soft: #102336;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px -12px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-canvas: var(--canvas); --color-surface: var(--surface); --color-subtle: var(--subtle);
+  --color-hover: var(--hover); --color-line: var(--line); --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink); --color-muted: var(--muted); --color-faint: var(--faint);
+  --color-primary: var(--primary); --color-on-primary: var(--on-primary);
+  --color-accent: var(--accent); --color-accent-soft: var(--accent-soft);
+  --color-sky: var(--sky); --color-sky-soft: var(--sky-soft); --color-sun: var(--sun);
+  --color-teal: var(--teal); --color-violet: var(--violet);
+  --color-danger: var(--red); --color-danger-soft: var(--red-soft);
+  --color-success: var(--green); --color-success-soft: var(--green-soft);
+  --color-warn: var(--amber); --color-warn-soft: var(--amber-soft);
+  --color-info: var(--blue); --color-info-soft: var(--blue-soft);
+  --shadow-card: var(--shadow);
+}
+
+@layer base {
+  html { font-family: var(--font-sans); font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased; }
+  body { @apply bg-canvas text-ink text-[15px] leading-relaxed; }
+  a { @apply text-ink underline decoration-line-strong underline-offset-2 transition-colors hover:decoration-ink; }
+  h1 { @apply text-[1.65rem] font-semibold tracking-tight mt-1 mb-4 flex flex-wrap items-center gap-x-3 gap-y-1; }
+  h2 { @apply text-[1.02rem] font-semibold tracking-tight mb-2 flex flex-wrap items-center gap-2; }
+  code { @apply rounded-md bg-hover px-1.5 py-0.5 text-[.85em]; }
+  ::selection { background: var(--accent-soft); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Form controls (the forms plugin resets them; these give the app's look). */
+  input[type=text], input[type=password], input[type=email], input[type=number], input[type=search],
+  input[type=date], input[type=file], select, textarea {
+    @apply rounded-xl border-line bg-surface text-ink text-sm shadow-none focus:border-accent focus:ring-2 focus:ring-accent/25;
+  }
+  input[type=file] { @apply border p-2 file:mr-3 file:rounded-lg file:border-0 file:bg-hover file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink; }
+  input[type=checkbox], input[type=radio] { @apply border-line-strong bg-surface text-primary focus:ring-accent/30; }
+  input[type=checkbox] { @apply rounded-md; }
+
+  button { @apply cursor-pointer; }
+}
+
+@layer components {
+  /* Buttons: .btn (outline), .btn-primary (near-black), .btn-ghost. Plain <button> and
+     a.button get the outline look so older templates match. */
+  .btn, a.button, main button:not(.link):not([class*="btn-"]):not(.decide):not(.icon-btn) {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-4 py-2 text-sm font-medium text-ink no-underline transition hover:bg-hover active:scale-[.99];
+  }
+  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-xl border border-primary bg-primary px-4 py-2 text-sm font-medium text-on-primary no-underline transition hover:opacity-90 active:scale-[.99]; }
+  .btn-ghost { @apply inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-muted no-underline transition hover:bg-hover hover:text-ink; }
+  .icon-btn { @apply inline-flex size-10 items-center justify-center rounded-xl border border-line bg-surface text-ink transition hover:bg-hover; }
+  button.link { @apply border-0 bg-transparent p-0 text-ink underline; }
+
+  /* Cards and metric tiles. */
+  .card { @apply mb-5 min-w-0 rounded-2xl border border-line bg-surface p-5 shadow-card; }
+  .card > h2:first-child { @apply mb-3; }
+  .panel { @apply rounded-xl border border-line bg-subtle p-4; }
+  .narrow { @apply mx-auto my-8 max-w-md; }
+  .grid2 { @apply grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr))]; }
+  .grid2 > .card { @apply mb-0; }
+  .grid2 + .card, .card + .grid2, .grid2 + .grid2 { @apply mt-5; }
+  .tiles { @apply mb-5 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]; }
+  .tile { @apply flex flex-col rounded-2xl border border-line bg-surface p-4 shadow-card; }
+  .tile .label { @apply text-[13px] text-muted; }
+  .tile .value { @apply mt-1 text-[1.75rem] font-semibold leading-tight tracking-tight tabular-nums; }
+  .tile .value.small { @apply text-lg; }
+  .tile .note, .caption { @apply text-[13px] text-muted; }
+  .caption { @apply mb-3; }
+  .empty { @apply text-muted; }
+
+  /* Messages and notices. */
+  .messages { @apply mb-5 list-none space-y-2 p-0; }
+  .messages li, .warning, .info, .decided { @apply mb-3 rounded-xl border px-4 py-3 text-sm; }
+  .messages .success { @apply border-success/20 bg-success-soft text-success; }
+  .messages .error { @apply border-danger/20 bg-danger-soft text-danger; }
+  .messages .warning, .messages .info, .warning { @apply border-warn/20 bg-warn-soft text-warn; }
+  .info, .decided { @apply border-info/20 bg-info-soft text-info; }
+  .success-text { @apply text-success; }
+  .online { @apply font-medium text-success; }
+  .offline { @apply text-muted; }
+
+  /* Tables. */
+  table.list { @apply w-full border-separate border-spacing-0 text-sm; }
+  table.list th { @apply border-b border-line bg-subtle px-3 py-2.5 text-left text-xs font-medium text-muted first:rounded-tl-xl last:rounded-tr-xl; }
+  table.list td { @apply border-b border-line px-3 py-2.5 align-middle; }
+  table.list tbody tr { @apply transition-colors hover:bg-subtle; }
+  table.list tbody tr:last-child td { @apply border-b-0; }
+  table.list .num { @apply text-right tabular-nums; }
+  @media (max-width: 700px) { table.list { @apply block overflow-x-auto; } }
+
+  /* Badges and tags. */
+  .badge { @apply inline-flex items-center gap-1 rounded-full bg-hover px-2.5 py-0.5 align-middle text-xs font-medium text-ink; }
+  .badge.text_inconsistent, .badge.status-failed { @apply bg-danger-soft text-danger; }
+  .badge.structural_anomaly, .badge.status-processing, .badge.status-running, .badge.status-queued { @apply bg-warn-soft text-warn; }
+  .badge.status-processed, .badge.status-succeeded, .badge.status-imported { @apply bg-success-soft text-success; }
+  .badge.status-open, .badge.status-uploaded { @apply bg-info-soft text-info; }
+  .badge.status-partial { @apply bg-warn-soft text-warn; }
+  /* Data pipeline page (#66): the flow from the claims platform to the review queue. */
+  .flow { @apply mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5; }
+  .flow-step { @apply relative flex flex-col rounded-2xl border border-line bg-surface p-4 shadow-card; }
+  .flow-step + .flow-step::before { @apply absolute -left-3.5 top-1/2 hidden -translate-y-1/2 text-muted xl:block; content: "›"; font-size: 1.5rem; line-height: 1; }
+  .flow-step .label { @apply flex items-center justify-between gap-2 text-[13px] text-muted; }
+  .flow-step .value { @apply mt-2 text-[1.75rem] font-semibold leading-tight tracking-tight tabular-nums; }
+  .flow-step .note { @apply mt-1 text-[13px] text-muted; }
+  .controls { @apply flex flex-wrap items-center gap-2; }
+  .controls form { @apply m-0; }
+  .count { @apply text-sm font-normal text-muted; }
+  .tag { @apply rounded-md border border-line px-1.5 text-[11px] font-medium tracking-wide text-muted uppercase; }
+
+  /* Filters and plain forms. */
+  .filters { @apply mb-3 flex flex-wrap gap-3; }
+  .filters label { @apply flex flex-col gap-1 text-xs font-medium text-muted; }
+  form p { @apply mb-3; }
+  form p label { @apply mb-1 block text-sm font-medium; }
+  form p input:not([type=checkbox]):not([type=radio]) { @apply w-full; }
+  label.choice { @apply my-2 flex items-center gap-2.5 text-sm; }
+
+  /* Report page pieces. */
+  dl.fields { @apply m-0 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]; }
+  dl.fields dt { @apply text-[13px] text-muted; }
+  dl.fields dd { @apply m-0 font-semibold; }
+  pre.notes { @apply m-0 whitespace-pre-wrap rounded-xl bg-subtle p-4 font-sans text-sm; }
+  blockquote { @apply m-0 rounded-xl border-l-4 border-accent bg-accent-soft px-4 py-3; }
+  .verdict { @apply rounded-xl bg-hover px-4 py-3; }
+  .verdict.inconsistent { @apply bg-danger-soft text-danger; }
+  .verdict.consistent { @apply bg-success-soft text-success; }
+  .decision { @apply flex flex-wrap items-center gap-2; }
+  .decision h2 { @apply w-full; }
+  .decision .caption { @apply m-0 w-full; }
+  button.decide { @apply inline-flex min-w-[120px] items-center justify-center rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold transition hover:bg-hover; }
+  button.approved { @apply border-danger/40 text-danger hover:bg-danger-soft; }
+  button.rejected { @apply border-success/40 text-success hover:bg-success-soft; }
+
+  /* Progress bar: warm gradient fill on a quiet track. */
+  .progress { @apply h-2.5 overflow-hidden rounded-full bg-hover; }
+  .progress span { @apply block h-full rounded-full bg-gradient-to-r from-sun to-accent transition-[width] duration-500; }
+
+  [data-chart] { @apply min-h-[120px] w-full; }
+  .chart-loading { @apply animate-pulse rounded-xl bg-hover; }
+  .chart-error { @apply m-0 flex min-h-[120px] items-center justify-center rounded-xl border border-dashed border-line-strong px-4 text-center text-sm text-muted; }
+
+  /* Overview widgets. */
+  .page-head { @apply mb-6 flex flex-wrap items-end justify-between gap-4; }
+  .page-head h1 { @apply mb-1; }
+  .page-head p { @apply m-0 text-sm text-muted; }
+  .kpi { @apply flex min-w-0 flex-col gap-3 rounded-2xl border border-line bg-surface p-5 shadow-card; }
+  .kpi-icon { @apply flex size-9 items-center justify-center rounded-xl; }
+  .kpi-value { @apply text-[1.9rem] leading-none font-semibold tracking-tight tabular-nums; }
+  .kpi-label { @apply text-[13px] text-muted; }
+  .kpi-note { @apply mt-auto border-t border-line pt-3 text-[13px] text-muted; }
+  .card-head { @apply mb-4 flex flex-wrap items-start justify-between gap-2; }
+  .card-head h2 { @apply mb-0.5; }
+  .card-head p { @apply m-0 text-[13px] text-muted; }
+  .legend-list { @apply m-0 list-none space-y-2.5 p-0 text-sm; }
+  .legend-list li { @apply flex items-center gap-2.5; }
+  .legend-dot { @apply size-2.5 shrink-0 rounded-full; }
+  .stage { @apply grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5; }
+  .stage-bar { @apply col-span-2 h-2.5 overflow-hidden rounded-full bg-hover; }
+  .stage-bar span { @apply block h-full min-w-1 rounded-full; }
+
+  /* Shared page pieces: back link, empty state, table wrapper, notices with icons. */
+  .back-link { @apply mb-3 inline-flex items-center gap-1.5 text-sm text-muted no-underline hover:text-ink; }
+  .empty-state { @apply flex flex-col items-center gap-3 px-4 py-12 text-center; }
+  .empty-state h2 { @apply mb-0 justify-center; }
+  .empty-state p { @apply m-0 max-w-md text-sm text-muted; }
+  .table-wrap { @apply -mx-5 overflow-x-auto px-5; }
+  .table-wrap table.list { @apply table min-w-[560px]; }
+  .notice { @apply mb-4 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm; }
+  .notice svg { @apply mt-0.5 shrink-0; }
+  .notice-warn { @apply border-warn/20 bg-warn-soft text-warn; }
+  .notice-info { @apply border-info/20 bg-info-soft text-info; }
+  .notice-danger { @apply border-danger/20 bg-danger-soft text-danger; }
+  .notice-success { @apply border-success/20 bg-success-soft text-success; }
+
+  /* Decision choices on the report: one radio per decision, then a single submit. */
+  .choice-card { @apply flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-surface p-3.5 transition hover:bg-hover has-[:checked]:border-ink has-[:checked]:bg-subtle has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent/40; }
+  .choice-card input { @apply mt-0.5; }
+
+  .skip-link { @apply sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-xl focus:bg-primary focus:px-4 focus:py-2 focus:text-on-primary; }
+
+  /* App shell. */
+  .nav-link { @apply flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-muted no-underline transition hover:bg-hover hover:text-ink; }
+  .nav-link.active { @apply bg-hover font-medium text-ink; }
+  .nav-section { @apply mt-6 mb-2 px-3 text-[11px] font-medium tracking-wider text-faint uppercase; }
+}
+
+[x-cloak] { display: none !important; }

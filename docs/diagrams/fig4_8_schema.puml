@@ -1,0 +1,123 @@
+@startuml
+' Database schema (PostgreSQL, Django migrations accounts/activity/audit 0001-0002), 26 Oct 2026
+skinparam shadowing false
+skinparam ArrowColor black
+skinparam classBackgroundColor white
+skinparam classBorderColor black
+skinparam linetype ortho
+skinparam nodesep 40
+skinparam ranksep 50
+hide circle
+hide methods
+
+entity "User" as user {
+  * id : bigint <<PK>>
+  --
+  * username : varchar(150) <<unique>>
+  * password : varchar(128) (salted hash)
+  email : varchar <<unique when set>>
+  * role : Auditor | Administrator
+  * is_active : boolean
+  * date_joined : timestamptz
+  last_login : timestamptz
+}
+
+entity "SocialAccount" as social {
+  * id : int <<PK>>
+  --
+  * user_id : bigint <<FK>>
+  * provider : google
+  * uid : varchar (Google subject)
+}
+
+entity "ActivityLog" as log {
+  * id : bigint <<PK>>
+  --
+  user_id : bigint <<FK>> (null if sign-in failed)
+  * action : varchar(40)
+  detail : varchar(255)
+  * at : timestamptz
+}
+
+entity "Batch" as batch {
+  * id : bigint <<PK>>
+  --
+  * name : varchar(200)
+  uploaded_by_id : bigint <<FK>>
+  * uploaded_at : timestamptz
+  * status : uploaded | processing |\n processed | failed | imported
+  * claims_count : int
+  processed_at : timestamptz
+  error : text
+  run_log : jsonb
+  source_csv : text
+  source_sha256 : char(64)
+}
+
+entity "Job" as job {
+  * id : bigint <<PK>>
+  --
+  * batch_id : bigint <<FK>>
+  * queue : cpu | gpu
+  * status : queued | running |\n succeeded | failed
+  stage : varchar(40)
+  done, total : int
+  message : text
+  worker, task_id : varchar
+  created_by_id : bigint <<FK>>
+  created_at, started_at,\n finished_at : timestamptz
+}
+
+entity "Claim" as claim {
+  * id : bigint <<PK>>
+  --
+  batch_id : bigint <<FK>>
+  * claim_ref : varchar(64)
+  * provider_id : varchar(64)
+  * patient_ref : varchar(64)
+  beneficiary_type, patient_sex : varchar
+  patient_age : float
+  facility_level : smallint
+  * icd11_code : varchar(32)
+  * claim_amount : numeric(14,2)
+  * service_date : date
+  discharge_date : date
+  * clinical_notes : text
+  anomaly_score : float
+  .. unique (batch_id, claim_ref) ..
+}
+
+entity "ClassifierVerdict" as verdict {
+  * id : bigint <<PK>>
+  --
+  * claim_id : bigint <<FK>>
+  * verdict : consistent | inconsistent
+  * confidence : float
+  * model_version : varchar(100)
+}
+
+entity "AuditReport" as report {
+  * id : bigint <<PK>>
+  --
+  * claim_id : bigint <<FK>>
+  verdict_id : bigint <<FK>>
+  shap_attribution : jsonb
+  llm_narrative : text
+  flag_sources : jsonb
+  * status : pending | approved |\n rejected | escalated
+  reviewed_by_id : bigint <<FK>>
+  reviewed_at : timestamptz
+  * created_at : timestamptz
+}
+
+user ||--o{ social
+user ||--o{ log : performs
+user |o--o{ batch : uploads
+user |o--o{ job : starts
+user |o--o{ report : reviews
+batch ||--o{ job
+batch ||--o{ claim
+claim ||--o{ verdict
+claim ||--o{ report
+verdict |o--o{ report
+@enduml

@@ -1,0 +1,99 @@
+# Repeatable tests on every push and pull request (Course Sprint II: "run repeatable tests
+# through GitHub Actions and retain the results alongside the relevant commit").
+#
+# - tests: the ML and web suites together (259 tests, about a minute) against PostgreSQL,
+#   the database the deployed application uses. Dependencies come from uv.lock, torch from
+#   the CPU-only index (pyproject.toml); nothing needs a GPU, a model download, Google Drive
+#   or a live API, because the tests mock them. The JUnit report is kept as an artifact of
+#   the run, so each commit's results stay inspectable.
+# - stylesheet: rebuilds web/static/css/app.css from its Tailwind source and fails if the
+#   committed file differs, i.e. if someone changed templates or app.css source without
+#   running `npm run build:css`.
+name: Tests
+
+on:
+  push:
+    branches: [dev]      # main is tested by deploy.yml, which calls this workflow before deploying
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_DB: claimguard
+          POSTGRES_USER: claimguard
+          POSTGRES_PASSWORD: claimguard-ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U claimguard"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://claimguard:claimguard-ci@localhost:5432/claimguard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.5"          # the version the Dockerfile uses
+          enable-cache: true
+
+      - name: Install dependencies from uv.lock
+        run: uv sync --frozen --python 3.13
+
+      - name: Run the test suite
+        run: uv run --frozen python -m pytest -q --junitxml=test-results/junit.xml
+
+      - name: Summarise the results
+        if: always()
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+          try:
+              root = ET.parse("test-results/junit.xml").getroot()
+          except (FileNotFoundError, ET.ParseError):
+              print("No test report was written."); raise SystemExit
+          suite = root if root.tag == "testsuite" else root.find("testsuite")
+          total, failures, errors, skipped = (int(suite.get(k, 0)) for k in ("tests", "failures", "errors", "skipped"))
+          print(f"### Tests at {'${{ github.sha }}'[:7]}\n")
+          print(f"| Passed | Failed | Errors | Skipped | Time (s) |\n|---|---|---|---|---|")
+          print(f"| {total - failures - errors - skipped} | {failures} | {errors} | {skipped} | {float(suite.get('time', 0)):.1f} |")
+          EOF
+
+      - name: Keep the test report with this commit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.sha }}
+          path: test-results/
+          retention-days: 90
+
+  stylesheet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build:css
+      - name: Committed stylesheet matches its source
+        run: |
+          git diff --exit-code --stat web/static/css/app.css || {
+            echo "::error file=web/static/css/app.css::Out of date: run 'npm run build:css' and commit the result."
+            exit 1
+          }
