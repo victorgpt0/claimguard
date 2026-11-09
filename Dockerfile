@@ -10,7 +10,9 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-default-groups --group web --group sha
 COPY . .
-RUN DJANGO_DEBUG=false DJANGO_SECRET_KEY=build-only python web/manage.py collectstatic --noinput
+# src/ is the Tailwind source (built into css/app.css): not served, and its @import would fail
+# the manifest's post-processing.
+RUN DJANGO_DEBUG=false DJANGO_SECRET_KEY=build-only python web/manage.py collectstatic --noinput --ignore src
 
 EXPOSE 8000
 CMD ["sh", "-c", "python web/manage.py migrate --noinput && gunicorn --chdir web claimguard_web.wsgi --bind 0.0.0.0:8000 --workers 3"]
