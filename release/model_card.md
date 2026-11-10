@@ -34,7 +34,7 @@ This is the frozen checkpoint every reported result was produced with. Pin the r
 - **Model type:** sequence-pair classifier, LoRA adapter (PEFT) with a trained classification head
 - **Language:** English
 - **Licence:** MIT (the base model is also MIT)
-- **Code:** the ClaimGuard repository (`src/classification/`) <!-- TODO(student): add the public repo URL if the repository is made public; it is private now. -->
+- **Code:** [github.com/victorgpt0/claimguard](https://github.com/victorgpt0/claimguard) (`src/classification/`)
 
 ## Intended use
 
@@ -77,7 +77,7 @@ not be obtained, so the dataset (`v0.6-20k`) was generated:
 - Robustness noise: 30% of claims in every split get abbreviations, typos or spacing errors in the notes; the test split uses a different shorthand glossary and held-out fabrication boilerplate so it contains text the model never saw. <!-- docs/data_generation.md §5.4, §5.5 -->
 - ICD-11 definitions come from the WHO ICD-11 API, cached. <!-- artifacts/icd11_cache.json; README export command -->
 
-The dataset is not published with this model. <!-- TODO(student): decide whether to release the synthetic dataset (e.g. as an HF dataset repo) and link it here. -->
+The dataset is not published. It can be regenerated from the repository's generator (`src/data/`, `docs/data_generation.md`), with the same seeds; each note's sampling seed comes from its claim ID, but a different GPU or vLLM version can still change the generated text.
 
 ## Training procedure
 
@@ -177,8 +177,8 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-REPO = "<repo-id>"          # TODO(student): the Hub repo, e.g. <user>/claimguard-consistency-classifier
-REVISION = "<commit-sha>"   # the commit printed by src/release/publish_model.py (tag v1.0-evaluated)
+REPO = "victorgpt0/claimguard-consistency-classifier"
+REVISION = "v1.0-evaluated"   # the release tag; for a fully immutable pin use the commit sha it points to
 
 tokenizer = AutoTokenizer.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
 base = AutoModelForSequenceClassification.from_pretrained("emilyalsentzer/Bio_ClinicalBERT", num_labels=2)
@@ -195,9 +195,14 @@ verdict = ["consistent", "inconsistent"][int(scores.argmax())]
 
 ## Citation
 
-<!-- TODO(student): add the final project report's citation once submitted. -->
-Gichuru, V. K. (2026). *LLM-Assisted Anomaly Detection for Post-Payment Fraud Audit: A
-Case Study of Kenya's Social Health Authority*. ICS Project II, Strathmore University.
+Project report:
+Gichuru, V. K. (2026). *LLM-assisted anomaly detection for post-payment fraud audit: A case
+study of Kenya's Social Health Authority* [Unpublished undergraduate project report, ICS
+Project II]. Strathmore University.
+
+This model:
+Gichuru, V. K. (2026). *ClaimGuard semantic consistency classifier* (Version v1.0-evaluated)
+[LoRA adapter]. Hugging Face. https://huggingface.co/victorgpt0/claimguard-consistency-classifier
 
 Base model: Alsentzer, E. et al. (2019). Publicly Available Clinical BERT Embeddings.
 *Proceedings of the 2nd Clinical Natural Language Processing Workshop*.

@@ -9,7 +9,8 @@ Dry run by default: lists what would be uploaded and touches no network. --uploa
      training_config.json so the Hub does not mistake the repo for a full transformers model),
   3. tags that commit (v1.0-evaluated) and prints its sha to pin.
 
-The token is read from HF_TOKEN.
+The token is read from HF_WRITE_TOKEN, or HF_TOKEN if that is unset (the deployed system's
+HF_TOKEN only needs read access).
 
 Usage:
   python -m src.release.publish_model --repo-id <user>/claimguard-consistency-classifier \\
@@ -83,9 +84,9 @@ def main(argv: list[str] | None = None) -> int:
         print("Nothing uploaded. Add --upload to publish.")
         return 0
 
-    token = os.environ.get("HF_TOKEN")
+    token = os.environ.get("HF_WRITE_TOKEN") or os.environ.get("HF_TOKEN")
     if not token:
-        print("HF_TOKEN is not set (a write token from huggingface.co/settings/tokens).", file=sys.stderr)
+        print("HF_WRITE_TOKEN is not set (a write token from huggingface.co/settings/tokens).", file=sys.stderr)
         return 2
     from huggingface_hub import HfApi
 
