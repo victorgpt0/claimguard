@@ -71,10 +71,10 @@ reports (pipeline and Django platform), the components are integrated (database,
 ICD-11 cache, LLM, web interface, workers), initial tests cover valid, invalid and failure
 cases, and the evaluation goes well beyond a baseline (held-out test results, TC-045/046).
 Still open before it can be called closed:
-- [ ] **GitHub Actions:** the brief asks for repeatable tests run through GitHub Actions, with results kept alongside the commit. The repository has no workflow (`.github/workflows/` does not exist).
+- [x] **GitHub Actions:** `.github/workflows/tests.yml` runs the test suite on every push and pull request to `dev`; `deploy.yml` tests and deploys every merge into `main` (10 Nov: all runs green).
 - [ ] AI-use log: one entry still has `[Student: fill in]` review fields, and the review needs "one AI suggestion checked" (#54, student's own).
-- [ ] Board: move #24, #25 to Done; close or carry #26 (review preparation) and #54.
-- [ ] Push `dev` (2 local commits on 2 Nov: README) and commit the open interface work.
+- [~] Board: #25 closed 10 Nov. #24 stays open for TC-015 (usability); #26 (review preparation) and #54 stay open.
+- [x] `dev` pushed and the interface work committed (#63).
 
 ## Course Sprint III: Project Completion, Deployment and Final Evaluation
 
@@ -82,10 +82,12 @@ Still open before it can be called closed:
 The brief now asks for a complete, usable, deployed and evaluated project, not only
 "approaching completion". Each expectation below is mapped to existing work or a gap.
 - [ ] **Traceability record:** objective or requirement → component → test or evaluation → result → evidence. `tests/test_plan.md` covers FR/NFR/DR; an objective-level table for Chapter 5, with unmet requirements explained, is missing.
-- [~] **Coherent, task-based interface:** consistent design system, navigation, roles, dark mode and sign-in done 2 Nov (uncommitted). Still to check page by page: empty, loading, error and permission-denied states; keyboard use, visible focus, contrast, status never shown by colour alone; mobile layout.
+- [~] **Coherent, task-based interface:** consistent design system, navigation, roles, dark mode and sign-in done 2 Nov; empty, error and permission-denied states covered on every page (#63). Still to check: keyboard use, visible focus, contrast, status never shown by colour alone; mobile layout.
 - [x] **Honest uncertainty:** the report page showed the classifier's softmax output as "% confidence"; the brief says a raw score is not a calibrated probability. Relabelled "model score" with an explanation, CSV column `classifier_score` (2 Nov). Calibration not evaluated: Chapter 5 should say so. The narrative prompt still passes the score as "Classifier confidence" (frozen, evaluated pipeline); none of the 229 stored narratives repeats it.
 - [ ] **Feedback as training data:** the brief asks that feedback be reviewed before it becomes training data. Auditor decisions are the review, and FR-14 gates promotion; Chapter 5 should state this argument explicitly.
-- [ ] **Operational release over HTTPS** with the real backend, database and model (#39). Hosting choice (#32) still open; the brief's examples are Cloudflare, AWS ECS and Hugging Face. The Colab GPU worker has not run end to end.
+- [x] **Operational release over HTTPS** with the real backend, database and model (#32, #39): Oracle Cloud Always Free VM (uk-london-1) at claimsguard.tech behind Cloudflare, PostgreSQL and Redis on the VM, deployed automatically from `main` (9–10 Nov; runbook `deploy/README.md`). Still to do for #39: record the tested setup in `docs/environment.md`, which still describes Neon and Upstash.
+- [~] **Colab GPU worker against the deployed release:** `notebooks/05_gpu_worker.ipynb` started and connected (10 Nov); one uploaded batch processed end to end on the GPU queue still to record (TC-040).
+- [~] **Claims ingestion on the live release (#64–#66):** `live-v1` generated and on Drive. Still to do: load it with `python -m sha_cdp.seed` on the VM, run one monthly pull, and record it (TC-049).
 - [ ] **Model release:** frozen classifier (`evaluated_v1/`) published with a model card and a pinned revision (brief Example 3; `docs/completion_plan.md` already plans the Hugging Face Hub hand-off).
 - [ ] **Testing and evaluation:** usability test with a representative user (TC-015), failure scenarios on the deployed system (expired session, unavailable worker or database, duplicate submission), defects corrected and retested.
 - [ ] **Operational evidence:** response times, failure rates, a restart and an unavailable-dependency test on the deployed release.
@@ -113,14 +115,14 @@ Started early on 17 Oct. Status on 19 Oct below.
 - [x] Stage-1 tuning script and text screen; v0.5 values in `config.example.yaml` (#28, #50, TC-030). Re-run on v0.6.
 - [x] Review lanes and flag sources in the pipeline and dashboard (#46); first validation run with tuned stage 1 (TC-031).
 - [x] Code: seed summary (#29), rule-based baseline (#30), retraining script and history (#31, #47, #48, #49), evaluation harness (#33–#38).
-- [ ] **Open question from TC-031:** on validation the rule-based baseline has the higher F1 (0.60 vs 0.51): the structural-anomaly lane carries most of the pipeline's false positives, and the rules catch inflated caesarean, which the pipeline misses.
+- [x] **Open question from TC-031:** on validation the rule-based baseline has the higher F1 (0.60 vs 0.51): the structural-anomaly lane carries most of the pipeline's false positives, and the rules catch inflated caesarean, which the pipeline misses. Resolved 25 Oct (TC-036): configurations A and C are both reported; stage 1 + rules is future work only (10 Nov).
 - [x] Full dataset (18 Oct): v0.6-20k, 20,000 claims, 240 providers, 333 per typology, tagged `v0.6-data` (`docs/data_generation.md`).
 - [x] Stage 1 re-tuned on v0.6 (19 Oct, TC-032): contamination 0.15, autoencoder quantile 0.975, screen threshold 0.005553; recall 0.81 ± 0.02. In `config.example.yaml`.
 - [x] Classifier fine-tuned with all 5 seeds on Colab (18 Oct, TC-033): validation F1 0.975 ± 0.004. Best seed 7 copied to Drive `models/classifier_lora/active/` and frozen as `evaluated_v1/` (adapter files directly inside each folder, not in a run subfolder). "CS" shortcut largely gone; new defect: 0.8% of notes partly in Chinese (validator fixed for future data).
 - [x] Pipeline run on the v0.6 Deployment/Demonstration Pool with narratives (18 Oct, notebook 03, TC-034): 354 reports, 82 narratives, 0 failures. Stage-1 settings as in TC-032 (screen threshold 0.005553); classifier seed 7.
-- [~] Rule-based baseline run on v0.6 validation (222 of 3,600 flagged). Structured-only and zero-shot LLM baselines not yet written (#30, #52).
-- [~] Feedback loop: 80 simulated decisions recorded on 19 Oct (36 approved, 44 rejected; 59 examples, all tagged simulated; 44 old v0.5 reports unmatched and left pending). **Do not rerun `--simulate-auditor`.** Remaining: the retraining run (`python -m src.feedback.run_retraining --config config/config.example.yaml --classifier-data /content/classifier_data` on Colab after re-exporting), which waits for a GPU: no Colab compute units on 19 Oct; on the workstation CPU one epoch takes about 1.8 h.
-- [ ] Deployment requirements identified; hosting option chosen from `docs/hosting_guide.md`.
+- [x] Rule-based baseline run on v0.6 validation (222 of 3,600 flagged). Structured-only and zero-shot LLM baselines written and run on 25 Oct (#30, #52, TC-037).
+- [x] Feedback loop: retraining run on 25 Oct; the candidate was refused by the FR-14 gate (#31, TC-013, TC-014). Before that, 80 simulated decisions were recorded on 19 Oct (36 approved, 44 rejected; 59 examples, all tagged simulated; 44 old v0.5 reports unmatched and left pending). **Do not rerun `--simulate-auditor`.** Remaining: the retraining run (`python -m src.feedback.run_retraining --config config/config.example.yaml --classifier-data /content/classifier_data` on Colab after re-exporting), which waits for a GPU: no Colab compute units on 19 Oct; on the workstation CPU one epoch takes about 1.8 h.
+- [x] Deployment requirements identified; hosting option chosen (#32): Oracle Cloud Always Free VM behind Cloudflare (9 Nov), replacing the 17 Oct Cloudflare Tunnel recommendation.
 
 ### Sprint 7 (26 Oct – 1 Nov): Evaluation and hosting
 - [x] Validation comparison on v0.6 and choice of reported configurations (25 Oct, TC-036): configuration A (the pipeline as designed) and C (`hybrid_text_rules`: text lane OR any rule) are both reported on the test split. Phase 0 order in `docs/platform_plan.md`.
@@ -131,11 +133,12 @@ Started early on 17 Oct. Status on 19 Oct below.
 - [x] Automated faithfulness check script: a narrative passes only if it names the billed code's official ICD-11 title and refers to specific content from the claim's clinical notes. Run on every report (28 Oct, TC-047): 141 of 146 test-split narratives pass; of all 11 failures across both databases, 3 are real (definition text presented as note content), 8 are the rule's false negatives.
 - [ ] Researcher scores 50 random reports on the five-criterion Likert rubric (single-rater; no Krippendorff's alpha).
 - [ ] SHAP coherence check on 100 flagged claims.
-- [ ] Project deployed online and the tested setup recorded in `docs/environment.md`.
+- [~] Project deployed online (9–10 Nov, claimsguard.tech); the tested setup still to record in `docs/environment.md` (#39).
 - [x] Django platform, decided 25 Oct (`docs/platform_plan.md`; reverses the 12 Oct descoping of sign-in and roles), built on branch `django` alongside phase 0: accounts, roles and Google sign-in (#62, #61), review pages (#63), upload with validation and jobs on CPU and GPU queues (#57, #58), hosted Neon PostgreSQL and Upstash Redis (26 Oct), batch summary with Markdown and CSV downloads (#59), user management and activity log (#56). TC-038 to TC-044.
 - [x] Documentation of the platform (#60, 26 Oct): Chapter 4 diagrams in `docs/diagrams/`, paste-ready Chapter 3 and 4 text in `compare/changes.txt` section D, Chapter 5 draft, test plan, README, hosting guide.
-- [ ] Colab GPU worker run once end to end (`notebooks/05_gpu_worker.ipynb`; needs the branch pushed).
-- [ ] Supervisor agreement to the change of stack; then merge `django` into `dev`.
+- [~] Colab GPU worker run once end to end (`notebooks/05_gpu_worker.ipynb`): started and connected 10 Nov; a processed batch still to record.
+- [~] `django` merged into `dev` (1 Nov, `41101b9`); supervisor agreement to the change of stack still to confirm.
+- [x] Claims ingestion (3 Nov): simulated SHA claims platform (#65), live feed data set (#64, `live-v1` generated), scheduled pull and Data pipeline page (#66). TC-048, TC-049.
 
 ## Final
 
@@ -145,6 +148,18 @@ Started early on 17 Oct. Status on 19 Oct below.
 - [ ] Abstract revised last; Gantt chart appendix redrawn to this plan.
 - [ ] AI-use declaration distilled from the log.
 - [ ] Final release tagged (`v1.0`); presentation prepared.
+
+### Remaining implementation (checked 10 Nov)
+In order; tag `v1.0` (#44) only once the rest is done.
+- [ ] Rubric scoring of 50 random reports (#37), researcher only; `docs/rubric_guide.md`.
+- [ ] SHAP coherence check on 100 flagged claims (#38); `docs/shap_coherence_guide.md`.
+- [ ] One uploaded batch processed end to end by the Colab GPU worker against the deployed release (TC-040).
+- [ ] `live-v1` loaded into the claims platform on the VM and one monthly pull recorded (TC-049).
+- [ ] Model release: `evaluated_v1/` on the Hugging Face Hub with a model card and a pinned revision.
+- [ ] Usability test with a representative user (TC-015, #24).
+- [ ] Failure scenarios on the deployed system: expired session, unavailable worker or database, duplicate submission; defects fixed and retested.
+- [ ] Operational evidence: response times, failure rates, a restart and an unavailable-dependency test; tested setup in `docs/environment.md` (#39).
+- [ ] Accessibility pass: keyboard use, visible focus, contrast, status not by colour alone, mobile layout.
 
 ---
 
