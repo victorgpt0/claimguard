@@ -86,8 +86,8 @@ The brief now asks for a complete, usable, deployed and evaluated project, not o
 - [x] **Honest uncertainty:** the report page showed the classifier's softmax output as "% confidence"; the brief says a raw score is not a calibrated probability. Relabelled "model score" with an explanation, CSV column `classifier_score` (2 Nov). Calibration not evaluated: Chapter 5 should say so. The narrative prompt still passes the score as "Classifier confidence" (frozen, evaluated pipeline); none of the 229 stored narratives repeats it.
 - [ ] **Feedback as training data:** the brief asks that feedback be reviewed before it becomes training data. Auditor decisions are the review, and FR-14 gates promotion; Chapter 5 should state this argument explicitly.
 - [x] **Operational release over HTTPS** with the real backend, database and model (#32, #39): Oracle Cloud Always Free VM (uk-london-1) at claimsguard.tech behind Cloudflare, PostgreSQL and Redis on the VM, deployed automatically from `main` (9–10 Nov; runbook `deploy/README.md`). Still to do for #39: record the tested setup in `docs/environment.md`, which still describes Neon and Upstash.
-- [~] **Colab GPU worker against the deployed release:** `notebooks/05_gpu_worker.ipynb` started and connected (10 Nov); one uploaded batch processed end to end on the GPU queue still to record (TC-040).
-- [~] **Claims ingestion on the live release (#64–#66):** `live-v1` generated and on Drive. Still to do: load it with `python -m sha_cdp.seed` on the VM, run one monthly pull, and record it (TC-049).
+- [~] **Colab GPU worker against the deployed release:** `notebooks/05_gpu_worker.ipynb` runs and connects to the deployed queue (10 Nov); it has not yet processed a batch. One uploaded batch run end to end on the GPU queue still to record (TC-040).
+- [x] **Claims ingestion on the live release (#64–#66):** `live-v1` generated and ingested into the deployed site (by 10 Nov). Record the live run in TC-049, which still describes the 3 Nov smoke run on the deployment pool.
 - [ ] **Model release:** frozen classifier (`evaluated_v1/`) published with a model card and a pinned revision (brief Example 3; `docs/completion_plan.md` already plans the Hugging Face Hub hand-off).
 - [ ] **Testing and evaluation:** usability test with a representative user (TC-015), failure scenarios on the deployed system (expired session, unavailable worker or database, duplicate submission), defects corrected and retested.
 - [ ] **Operational evidence:** response times, failure rates, a restart and an unavailable-dependency test on the deployed release.
@@ -131,12 +131,12 @@ Started early on 17 Oct. Status on 19 Oct below.
 - [x] Stratified results: clean versus noisy text, common versus rare ICD-11 codes (TC-045, TC-046).
 - [x] Cost summary table (fraud value flagged, auditor-hours) (TC-045).
 - [x] Automated faithfulness check script: a narrative passes only if it names the billed code's official ICD-11 title and refers to specific content from the claim's clinical notes. Run on every report (28 Oct, TC-047): 141 of 146 test-split narratives pass; of all 11 failures across both databases, 3 are real (definition text presented as note content), 8 are the rule's false negatives.
-- [ ] Researcher scores 50 random reports on the five-criterion Likert rubric (single-rater; no Krippendorff's alpha).
-- [ ] SHAP coherence check on 100 flagged claims.
+- [x] Researcher scores 50 random reports on the five-criterion Likert rubric (single-rater; no Krippendorff's alpha) (1 Nov, #37, TC-050): means 4.10–4.74 on four criteria; actionability 2.00 is the weak one.
+- [x] SHAP coherence check on 100 flagged claims (1 Nov, #38, TC-051): 75 of 100 coherent; every structural typology fully coherent, ghost billing 4/15 and record fabrication 3/14.
 - [~] Project deployed online (9–10 Nov, claimsguard.tech); the tested setup still to record in `docs/environment.md` (#39).
 - [x] Django platform, decided 25 Oct (`docs/platform_plan.md`; reverses the 12 Oct descoping of sign-in and roles), built on branch `django` alongside phase 0: accounts, roles and Google sign-in (#62, #61), review pages (#63), upload with validation and jobs on CPU and GPU queues (#57, #58), hosted Neon PostgreSQL and Upstash Redis (26 Oct), batch summary with Markdown and CSV downloads (#59), user management and activity log (#56). TC-038 to TC-044.
 - [x] Documentation of the platform (#60, 26 Oct): Chapter 4 diagrams in `docs/diagrams/`, paste-ready Chapter 3 and 4 text in `compare/changes.txt` section D, Chapter 5 draft, test plan, README, hosting guide.
-- [~] Colab GPU worker run once end to end (`notebooks/05_gpu_worker.ipynb`): started and connected 10 Nov; a processed batch still to record.
+- [~] Colab GPU worker run once end to end (`notebooks/05_gpu_worker.ipynb`): works and connects (10 Nov), but has not yet processed a batch.
 - [~] `django` merged into `dev` (1 Nov, `41101b9`); supervisor agreement to the change of stack still to confirm.
 - [x] Claims ingestion (3 Nov): simulated SHA claims platform (#65), live feed data set (#64, `live-v1` generated), scheduled pull and Data pipeline page (#66). TC-048, TC-049.
 
@@ -151,10 +151,8 @@ Started early on 17 Oct. Status on 19 Oct below.
 
 ### Remaining implementation (checked 10 Nov)
 In order; tag `v1.0` (#44) only once the rest is done.
-- [ ] Rubric scoring of 50 random reports (#37), researcher only; `docs/rubric_guide.md`.
-- [ ] SHAP coherence check on 100 flagged claims (#38); `docs/shap_coherence_guide.md`.
 - [ ] One uploaded batch processed end to end by the Colab GPU worker against the deployed release (TC-040).
-- [ ] `live-v1` loaded into the claims platform on the VM and one monthly pull recorded (TC-049).
+- [ ] TC-049 updated with the live `live-v1` ingestion (done; only the record is missing).
 - [ ] Model release: `evaluated_v1/` on the Hugging Face Hub with a model card and a pinned revision.
 - [ ] Usability test with a representative user (TC-015, #24).
 - [ ] Failure scenarios on the deployed system: expired session, unavailable worker or database, duplicate submission; defects fixed and retested.
