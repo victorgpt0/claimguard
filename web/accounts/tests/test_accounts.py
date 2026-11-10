@@ -181,3 +181,15 @@ def test_activity_log_is_read_only_and_exportable(make_user):
                            {"action": "download_csv", "_selected_action": [entry.pk]})
     assert response["Content-Type"] == "text/csv" and "report #1: approved" in response.content.decode()
     assert ActivityLog.objects.filter(action="download").exists()
+
+
+def test_a_failed_google_sign_in_is_logged_with_its_reason(rf, caplog):
+    from accounts.adapters import LinkedAccountsOnlyAdapter
+
+    class Provider:
+        id = "google"
+
+    with caplog.at_level("WARNING", logger="accounts.adapters"):
+        LinkedAccountsOnlyAdapter().on_authentication_error(rf.get("/"), Provider(), error="unknown",
+                                                            exception=ValueError("state mismatch"))
+    assert "provider=google error=unknown" in caplog.text and "state mismatch" in caplog.text
