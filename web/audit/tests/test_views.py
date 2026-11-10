@@ -27,6 +27,35 @@ def test_each_role_reaches_only_its_pages(auditor, admin, reports, pipeline_file
     assert admin.get(reverse("audit:model")).status_code == 200
     nav = auditor.get(reverse("audit:overview")).content.decode()
     assert "Review queue" in nav and "Model performance" not in nav
+    assert "Data pipeline" not in nav and "Batches" not in nav and "Upload batch" not in nav
+    admin_nav = admin.get(reverse("audit:overview")).content.decode()
+    assert "Data pipeline" in admin_nav and "Batches" in admin_nav and "Review queue" not in admin_nav
+
+
+def test_auditors_reach_no_batch_or_pipeline_url(auditor, admin, reports, pipeline_files):
+    """Separation of duties: the Administrator decides what is audited (feed, uploads, jobs);
+    the Fraud Auditor judges the results. Every batch and pipeline URL refuses an Auditor,
+    whether or not a link to it is shown."""
+    from django.urls import get_resolver
+
+    from audit.models import Job
+
+    batch_id = reports[0].claim.batch_id
+    job = Job.objects.create(batch_id=batch_id, queue="cpu")
+    args = {"batch": [batch_id], "start_job": [batch_id], "batch_summary": [batch_id], "batch_reports": [batch_id],
+            "job_progress": [job.pk], "close": [batch_id]}
+    names = ["audit:batches", "audit:upload", "audit:upload_template", "audit:batch", "audit:start_job",
+             "audit:batch_summary", "audit:batch_reports", "audit:job_progress", "ingestion:pipeline",
+             "ingestion:live", "ingestion:sync", "ingestion:close", "ingestion:toggle", "ingestion:clock"]
+    # every route in the two modules is listed, so a new page cannot be added without a role decision
+    routed = {f"{ns}:{p.name}" for ns in ("audit", "ingestion")
+              for p in get_resolver().namespace_dict[ns][1].url_patterns}
+    assert routed - set(names) == {"audit:overview", "audit:queue", "audit:report", "audit:decide",
+                                   "audit:model", "audit:feedback"}
+    for name in names:
+        url = reverse(name, args=args.get(name.split(":")[1], []))
+        assert auditor.get(url).status_code == 403, name
+        assert auditor.post(url).status_code in (403, 405), name   # 405: a GET-only route refuses first
 
 
 def test_overview_statistics(auditor, reports, pipeline_files):
@@ -39,9 +68,10 @@ def test_overview_statistics(auditor, reports, pipeline_files):
 
 def test_overview_empty_state_says_what_to_do(auditor, admin, db):
     page = auditor.get(reverse("audit:overview")).content.decode()
-    assert "No audit reports yet" in page and "Upload a batch to start" in page
+    assert "No audit reports yet" in page and "The Administrator loads claims for audit" in page
+    assert "Upload batch" not in page
     assert "chart-status" not in page and "chart-verdicts" not in page  # no report charts without reports
-    assert "A Fraud Auditor uploads batches" in admin.get(reverse("audit:overview")).content.decode()
+    assert "Upload batch" in admin.get(reverse("audit:overview")).content.decode()
 
 
 def test_queue_orders_by_score_and_filters_by_lane(auditor, reports, pipeline_files):
@@ -61,13 +91,13 @@ def test_report_shows_the_six_panels(auditor, reports, pipeline_files):
     assert "No narrative: the classifier found the notes consistent" in page
 
 
-def test_the_verdict_score_is_not_presented_as_confidence(auditor, reports, pipeline_files):
+def test_the_verdict_score_is_not_presented_as_confidence(auditor, admin, reports, pipeline_files):
     """The classifier's softmax output is uncalibrated (Course Sprint III brief): the report
     and the CSV export call it a model score, never confidence or a percentage."""
     page = auditor.get(reverse("audit:report", args=[reports[0].pk])).content.decode()
     assert "model score 0.90" in page and "not a calibrated probability" in page
     assert "confidence" not in page.lower() and "90%" not in page
-    header = auditor.get(reverse("audit:batch_reports", args=[reports[0].claim.batch_id])).content.decode().splitlines()[0]
+    header = admin.get(reverse("audit:batch_reports", args=[reports[0].claim.batch_id])).content.decode().splitlines()[0]
     assert "classifier_score" in header.split(",") and "confidence" not in header
 
 

@@ -142,11 +142,12 @@ def test_scheduled_pulls_respect_pause_and_never_overlap(platform, pipeline_file
 
 def test_the_page_and_its_controls_by_role(platform, pipeline_files, auditor, admin):
     seed.load(claims_set(), platform)
-    page = auditor.get(reverse("ingestion:pipeline"))
+    # The page is the Administrator's alone; an Auditor is refused every part of it.
+    for name, method in (("ingestion:pipeline", "get"), ("ingestion:live", "get"), ("ingestion:sync", "post"),
+                         ("ingestion:clock", "post"), ("ingestion:toggle", "post")):
+        assert getattr(auditor, method)(reverse(name)).status_code == 403
+    page = admin.get(reverse("ingestion:pipeline"))
     assert page.status_code == 200 and "Data pipeline" in page.content.decode() and "connected" in page.content.decode()
-    assert "Simulation controls" not in page.content.decode()
-    assert auditor.post(reverse("ingestion:clock"), {"action": "advance_week"}).status_code == 403
-    assert auditor.post(reverse("ingestion:toggle")).status_code == 403
 
     assert admin.post(reverse("ingestion:clock"), {"action": "advance_month"}).status_code == 302
     assert IngestionRun.objects.count() == 1 and Claim.objects.exists()   # the move is followed by a pull
@@ -156,15 +157,16 @@ def test_the_page_and_its_controls_by_role(platform, pipeline_files, auditor, ad
     clock.advance(platform, 12)   # into the middle of the next month, so a period is open
     sync.sync()
     open_batch = Batch.objects.filter(status="open").first()
-    assert auditor.post(reverse("ingestion:close", args=[open_batch.pk])).status_code == 302
+    assert auditor.post(reverse("ingestion:close", args=[open_batch.pk])).status_code == 403
+    assert admin.post(reverse("ingestion:close", args=[open_batch.pk])).status_code == 302
     open_batch.refresh_from_db()
     assert open_batch.status == "uploaded" and open_batch.jobs.exists()
-    assert auditor.post(reverse("ingestion:sync")).status_code == 302
+    assert admin.post(reverse("ingestion:sync")).status_code == 302
     assert ActivityLog.objects.filter(action="feed_sync").exists()
-    assert auditor.get(reverse("ingestion:live")).status_code == 200
+    assert admin.get(reverse("ingestion:live")).status_code == 200
 
 
-def test_the_page_says_when_the_platform_is_unreachable(auditor, pipeline_files, settings):
+def test_the_page_says_when_the_platform_is_unreachable(admin, pipeline_files, settings):
     settings.SHA_CDP_URL = "http://127.0.0.1:9"   # nothing listens there
-    body = auditor.get(reverse("ingestion:pipeline")).content.decode()
+    body = admin.get(reverse("ingestion:pipeline")).content.decode()
     assert "unreachable" in body and "No claims received yet" in body

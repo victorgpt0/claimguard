@@ -7,7 +7,6 @@
 <div class="page-head">
   <div><h1>Batch #{{ batch.pk }} · {{ batch.name }} <span class="badge status-{{ batch.status }}">{{ batch.get_status_display|capfirst }}</span></h1>
     <p>Uploaded {{ batch.uploaded_at|date:"Y-m-d H:i" }} by {{ batch.uploaded_by.username|default:"—" }}.</p></div>
-  {% if reports and user.is_auditor %}<a class="btn-primary" href="{% url 'audit:queue' %}">{% lucide "inbox" size=16 %} Review queue</a>{% endif %}
 </div>
 <div class="mb-5 grid gap-4 sm:grid-cols-2">
   <div class="kpi"><div class="flex items-center justify-between"><span class="kpi-label">Claims</span><span class="kpi-icon bg-sky-soft text-sky" aria-hidden="true">{% lucide "file-text" size=18 %}</span></div><span class="kpi-value">{{ batch.claims_count }}</span></div>

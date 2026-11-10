@@ -1,6 +1,8 @@
-"""Batch input and processing (FR-01, FR-15, phase 3): the Fraud Auditor uploads a claims CSV,
+"""Batch input and processing (FR-01, FR-15, phase 3): the Administrator uploads a claims CSV,
 which is validated in full and stored only if every row passes, then starts a job on the
-local CPU worker or the Colab GPU worker and watches its progress."""
+local CPU worker or the Colab GPU worker and watches its progress. Every page here is the
+Administrator's: the Fraud Auditor reviews the results in the queue and never sees batches
+(separation of duties)."""
 from __future__ import annotations
 
 import hashlib
@@ -16,7 +18,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
-from accounts.roles import any_role_required, auditor_required
+from accounts.roles import administrator_required
 from activity.models import ActivityLog
 
 from . import charts, services
@@ -47,13 +49,13 @@ class UploadForm(forms.Form):
         return upload
 
 
-@any_role_required
+@administrator_required
 def batch_list(request):
     batches = Batch.objects.select_related("uploaded_by").prefetch_related("jobs")[:100]
     return render(request, "audit/batches.html", {"batches": batches})
 
 
-@auditor_required
+@administrator_required
 def upload(request):
     form = UploadForm(request.POST or None, request.FILES or None)
     problems = None
@@ -103,7 +105,7 @@ def _store(frame: pd.DataFrame, raw: bytes, name: str, user) -> Batch:
 
 
 @require_GET
-@auditor_required
+@administrator_required
 def upload_template(request):
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="claims_template.csv"'
@@ -111,7 +113,7 @@ def upload_template(request):
     return response
 
 
-@any_role_required
+@administrator_required
 def batch_detail(request, pk: int):
     batch = get_object_or_404(Batch.objects.select_related("uploaded_by"), pk=pk)
     job = batch.jobs.first()
@@ -140,7 +142,7 @@ def _filename(batch: Batch, suffix: str) -> str:
 
 
 @require_GET
-@any_role_required
+@administrator_required
 def batch_summary_markdown(request, pk: int):
     """FR-16: the summary as a readable Markdown report."""
     batch = get_object_or_404(Batch.objects.select_related("uploaded_by"), pk=pk)
@@ -158,7 +160,7 @@ def batch_summary_markdown(request, pk: int):
 
 
 @require_GET
-@any_role_required
+@administrator_required
 def batch_reports_csv(request, pk: int):
     """FR-16: the batch's audit reports, one row each, with verdict, SHAP top 3 and decision."""
     batch = get_object_or_404(Batch, pk=pk)
@@ -172,7 +174,7 @@ def batch_reports_csv(request, pk: int):
     return response
 
 
-@auditor_required
+@administrator_required
 def start_job(request, pk: int):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -194,7 +196,7 @@ def start_job(request, pk: int):
     return redirect("audit:batch", pk=pk)
 
 
-@any_role_required
+@administrator_required
 def job_progress(request, pk: int):
     """The progress fragment the batch page polls (HTMX). Status 286 tells HTMX to stop
     polling once the job has finished."""

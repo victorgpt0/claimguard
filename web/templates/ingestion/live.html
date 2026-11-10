@@ -64,7 +64,7 @@
       <td>{% if b.job %}<span class="badge status-{{ b.job.status }}">{{ b.job.status }}</span>
           {% if b.job.status == "running" and b.job.total %}<span class="caption">{{ b.job.percent }}%</span>{% endif %}
           {% elif b.status == "open" %}<span class="caption">closes after {{ b.period_end|date:"j M" }}</span>{% else %}—{% endif %}</td>
-      <td>{% if b.status == "open" and user.is_auditor and b.n_claims %}
+      <td>{% if b.status == "open" and b.n_claims %}
         <form method="post" action="{% url 'ingestion:close' b.pk %}">{% csrf_token %}<button class="btn-ghost" type="submit">{% lucide "lock" size=14 %} Close now</button></form>{% endif %}</td>
     </tr>{% endfor %}</tbody>
   </table>
