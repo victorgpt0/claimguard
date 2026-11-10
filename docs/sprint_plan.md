@@ -87,7 +87,7 @@ The brief now asks for a complete, usable, deployed and evaluated project, not o
 - [ ] **Feedback as training data:** the brief asks that feedback be reviewed before it becomes training data. Auditor decisions are the review, and FR-14 gates promotion; Chapter 5 should state this argument explicitly.
 - [x] **Operational release over HTTPS** with the real backend, database and model (#32, #39): Oracle Cloud Always Free VM (uk-london-1) at claimsguard.tech behind Cloudflare, PostgreSQL and Redis on the VM, deployed automatically from `main` (9–10 Nov; runbook `deploy/README.md`). Still to do for #39: record the tested setup in `docs/environment.md`, which still describes Neon and Upstash.
 - [~] **Colab GPU worker against the deployed release:** `notebooks/05_gpu_worker.ipynb` runs and connects to the deployed queue (10 Nov); it has not yet processed a batch. One uploaded batch run end to end on the GPU queue still to record (TC-040).
-- [x] **Claims ingestion on the live release (#64–#66):** `live-v1` generated and ingested into the deployed site (by 10 Nov). Record the live run in TC-049, which still describes the 3 Nov smoke run on the deployment pool.
+- [x] **Claims ingestion on the live release (#64–#66):** `live-v1` generated and ingested into the deployed site (by 10 Nov). Recorded in TC-049: all nine monthly periods processed on the CPU worker, 732 of 2,393 claims flagged (Nov–Jun), 420 queued for review.
 - [ ] **Model release:** frozen classifier (`evaluated_v1/`) published with a model card and a pinned revision (brief Example 3; `docs/completion_plan.md` already plans the Hugging Face Hub hand-off).
 - [ ] **Testing and evaluation:** usability test with a representative user (TC-015), failure scenarios on the deployed system (expired session, unavailable worker or database, duplicate submission), defects corrected and retested.
 - [ ] **Operational evidence:** response times, failure rates, a restart and an unavailable-dependency test on the deployed release.
@@ -152,7 +152,7 @@ Started early on 17 Oct. Status on 19 Oct below.
 ### Remaining implementation (checked 10 Nov)
 In order; tag `v1.0` (#44) only once the rest is done.
 - [ ] One uploaded batch processed end to end by the Colab GPU worker against the deployed release (TC-040).
-- [ ] TC-049 updated with the live `live-v1` ingestion (done; only the record is missing).
+- [x] TC-049 updated with the live `live-v1` ingestion (10 Nov). live-v1 is fully consumed: a GPU batch needs an upload (deployment pool) or a new `live-v2`.
 - [ ] Model release: `evaluated_v1/` on the Hugging Face Hub with a model card and a pinned revision.
 - [ ] Usability test with a representative user (TC-015, #24).
 - [ ] Failure scenarios on the deployed system: expired session, unavailable worker or database, duplicate submission; defects fixed and retested.
