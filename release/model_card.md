@@ -34,7 +34,7 @@ This is the frozen checkpoint every reported result was produced with. Pin the r
 - **Model type:** sequence-pair classifier, LoRA adapter (PEFT) with a trained classification head
 - **Language:** English
 - **Licence:** MIT (the base model is also MIT)
-- **Code:** the ClaimGuard repository (`src/classification/`) <!-- TODO(student): add the public repo URL if the repository is made public; it is private now. -->
+- **Code:** [github.com/victorgpt0/claimguard](https://github.com/victorgpt0/claimguard) (`src/classification/`)
 
 ## Intended use
 
@@ -77,7 +77,7 @@ not be obtained, so the dataset (`v0.6-20k`) was generated:
 - Robustness noise: 30% of claims in every split get abbreviations, typos or spacing errors in the notes; the test split uses a different shorthand glossary and held-out fabrication boilerplate so it contains text the model never saw. <!-- docs/data_generation.md §5.4, §5.5 -->
 - ICD-11 definitions come from the WHO ICD-11 API, cached. <!-- artifacts/icd11_cache.json; README export command -->
 
-The dataset is not published with this model. <!-- TODO(student): decide whether to release the synthetic dataset (e.g. as an HF dataset repo) and link it here. -->
+The dataset is not published. It can be regenerated from the repository's generator (`src/data/`, `docs/data_generation.md`), with the same seeds; each note's sampling seed comes from its claim ID, but a different GPU or vLLM version can still change the generated text.
 
 ## Training procedure
 
