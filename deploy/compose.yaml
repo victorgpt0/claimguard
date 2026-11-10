@@ -108,7 +108,7 @@ services:
 
   # The simulated SHA claims platform (#65): reachable only inside the network, by the web
   # application and the ingest worker. Load claims once:
-  #   docker compose run --rm sha-cdp python -m sha_cdp.seed /srv/gdrive/claimguard/data/<feed>.parquet
+  #   docker compose run --rm sha-cdp python -m sha_cdp.seed /srv/gdrive/claimguard/data/processed/live-v1/live.parquet
   sha-cdp:
     <<: *restart
     build: {context: .., target: web}
