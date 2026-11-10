@@ -56,3 +56,6 @@ deploy/ca-private/
 deploy/origin/
 deploy/*.dump
 deploy/.deploy-history
+
+# Streamlit secrets (the dashboard is gone; never commit this file)
+.streamlit/secrets.toml
