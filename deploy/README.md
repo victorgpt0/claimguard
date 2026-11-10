@@ -200,6 +200,24 @@ Optional, if your plan offers it for private repositories: Settings â†’ Rules â†
 - [ ] One GPU job from Colab (step 8).
 - [ ] After a week without problems, retire Neon and Upstash.
 
+## 12. Operational evidence and failure tests (TC-053, TC-054)
+
+```bash
+bash /opt/claimguard/deploy/scripts/08-ops-check.sh timing           # setup + response times (safe)
+bash /opt/claimguard/deploy/scripts/08-ops-check.sh logs             # failure rates from the logs (safe)
+bash /opt/claimguard/deploy/scripts/08-ops-check.sh failures --yes   # stops each dependency in turn (~5 min)
+bash /opt/claimguard/deploy/scripts/08-ops-check.sh restart --yes    # restarts web, then everything
+sudo reboot     # then log back in and:
+bash /opt/claimguard/deploy/scripts/08-ops-check.sh after-reboot
+```
+
+Run `failures` and `restart` at a quiet time: they take the site down for a minute or two,
+and refuse while a job is queued or running. Stop the Colab GPU worker first. They create no
+accounts; they borrow a session for the first active Administrator and Auditor and delete it
+at the end (also on Ctrl-C, which starts every service again). Each run writes
+`~/claimguard-ops/<time>-<mode>/report.md`, which holds no secrets: copy those back for the
+test plan.
+
 ## Day to day
 
 | Task | Command (in `/opt/claimguard/deploy`) |
