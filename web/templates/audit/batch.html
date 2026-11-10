@@ -44,35 +44,36 @@
   <div class="grid2">
     <div>
       <div data-chart="chart-funnel"></div>
-      <table class="list">
+      <div class="table-scroll"><table class="list">
+        <caption class="sr-only">Flags and review lanes</caption>
         <tbody>
-          {% if s.flagged_by %}<tr><td>Flagged by Isolation Forest / autoencoder / text screen</td><td class="num">{{ s.flagged_by.isolation_forest }} / {{ s.flagged_by.autoencoder }} / {{ s.flagged_by.text_screen }}</td></tr>{% endif %}
-          <tr><td><span class="badge text_inconsistent">Text inconsistent</span></td><td class="num">{{ s.lanes.text_inconsistent }}</td></tr>
-          <tr><td><span class="badge structural_anomaly">Structural anomaly</span></td><td class="num">{{ s.lanes.structural_anomaly }}</td></tr>
-          <tr><td>Narratives generated{% if s.narrative_failures %} ({{ s.narrative_failures }} failed){% endif %}</td><td class="num">{{ s.narratives }}</td></tr>
+          {% if s.flagged_by %}<tr><th scope="row">Flagged by Isolation Forest / autoencoder / text screen</th><td class="num">{{ s.flagged_by.isolation_forest }} / {{ s.flagged_by.autoencoder }} / {{ s.flagged_by.text_screen }}</td></tr>{% endif %}
+          <tr><th scope="row"><span class="badge text_inconsistent">Text inconsistent</span></th><td class="num">{{ s.lanes.text_inconsistent }}</td></tr>
+          <tr><th scope="row"><span class="badge structural_anomaly">Structural anomaly</span></th><td class="num">{{ s.lanes.structural_anomaly }}</td></tr>
+          <tr><th scope="row">Narratives generated{% if s.narrative_failures %} ({{ s.narrative_failures }} failed){% endif %}</th><td class="num">{{ s.narratives }}</td></tr>
         </tbody>
-      </table>
+      </table></div>
     </div>
     <div>
-      <h3 class="mb-2 text-sm font-semibold">Review progress</h3>
-      <table class="list">
-        <thead><tr><th>Reviewer</th><th class="num">Approved</th><th class="num">Rejected</th><th class="num">Escalated</th></tr></thead>
+      <h3 class="mb-2 text-sm font-semibold" id="review-progress">Review progress</h3>
+      <div class="table-scroll"><table class="list" aria-labelledby="review-progress">
+        <thead><tr><th scope="col">Reviewer</th><th scope="col" class="num">Approved</th><th scope="col" class="num">Rejected</th><th scope="col" class="num">Escalated</th></tr></thead>
         <tbody>
           {% for name, d in s.reviewers.items %}<tr><td>{{ name }}</td><td class="num">{{ d.approved }}</td><td class="num">{{ d.rejected }}</td><td class="num">{{ d.escalated }}</td></tr>{% endfor %}
           <tr><td><strong>All</strong> ({{ s.review.pending }} pending)</td><td class="num">{{ s.review.approved }}</td><td class="num">{{ s.review.rejected }}</td><td class="num">{{ s.review.escalated }}</td></tr>
         </tbody>
-      </table>
+      </table></div>
     </div>
   </div>
 </section>
 <div class="grid2">
   <section class="card"><h2>Queued claims by provider</h2>
-    {% if s.top_providers %}<table class="list"><thead><tr><th>Provider</th><th class="num">Claims</th><th class="num">KES</th></tr></thead>
-    <tbody>{% for p in s.top_providers %}<tr><td>{{ p.claim__provider_id }}</td><td class="num">{{ p.claims }}</td><td class="num">{{ p.amount|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table>
+    {% if s.top_providers %}<div class="table-scroll"><table class="list"><caption class="sr-only">Queued claims by provider</caption><thead><tr><th scope="col">Provider</th><th scope="col" class="num">Claims</th><th scope="col" class="num">KES</th></tr></thead>
+    <tbody>{% for p in s.top_providers %}<tr><td>{{ p.claim__provider_id }}</td><td class="num">{{ p.claims }}</td><td class="num">{{ p.amount|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table></div>
     {% else %}<p class="caption mb-0">No claims from this batch were queued.</p>{% endif %}</section>
   <section class="card"><h2>Queued claims by ICD-11 code</h2>
-    {% if s.top_codes %}<table class="list"><thead><tr><th>Code</th><th class="num">Claims</th><th class="num">KES</th></tr></thead>
-    <tbody>{% for c in s.top_codes %}<tr><td>{{ c.claim__icd11_code }}</td><td class="num">{{ c.claims }}</td><td class="num">{{ c.amount|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table>
+    {% if s.top_codes %}<div class="table-scroll"><table class="list"><caption class="sr-only">Queued claims by ICD-11 code</caption><thead><tr><th scope="col">Code</th><th scope="col" class="num">Claims</th><th scope="col" class="num">KES</th></tr></thead>
+    <tbody>{% for c in s.top_codes %}<tr><td>{{ c.claim__icd11_code }}</td><td class="num">{{ c.claims }}</td><td class="num">{{ c.amount|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table></div>
     {% else %}<p class="caption mb-0">No claims from this batch were queued.</p>{% endif %}</section>
 </div>
 <section class="card"><h2>Models and settings</h2>

@@ -21,10 +21,9 @@ from django.views.decorators.http import require_GET
 from accounts.roles import administrator_required
 from activity.models import ActivityLog
 
-from . import charts, services
+from . import charts, services, tasks
 from .models import Batch, Claim, Job
 from .summary import TOP, batch_summary, funnel_counts, write_reports_csv
-from .tasks import process_batch
 from .validation import UPLOAD_COLUMNS, validate
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -118,9 +117,12 @@ def batch_detail(request, pk: int):
     batch = get_object_or_404(Batch.objects.select_related("uploaded_by"), pk=pk)
     job = batch.jobs.first()
     reports = batch.claims.filter(reports__isnull=False).count()
+    # Administrators run batches (#55). Asking Celery which workers are online takes its whole
+    # one-second timeout, so it is done only when the start form is shown.
+    can_start = (request.user.is_administrator and batch.status in (Batch.Status.UPLOADED, Batch.Status.FAILED)
+                 and not (job and job.active))
     context = {"batch": batch, "job": job, "reports": reports, "queues": Job.Queue.choices,
-               "can_start": request.user.is_auditor and batch.status in (Batch.Status.UPLOADED, Batch.Status.FAILED)
-               and not (job and job.active), "workers": services.workers_online()}
+               "can_start": can_start, "workers": services.workers_online() if can_start else {}}
     if _summarised(batch):
         summary = batch_summary(batch)
         context.update(s=summary, top=TOP, amount_claimed=_kes(summary["amount_claimed"]),
@@ -190,7 +192,11 @@ def start_job(request, pk: int):
             return redirect("audit:batch", pk=pk)
         job = Job.objects.create(batch=batch, queue=queue, created_by=request.user)
         ActivityLog.record(ActivityLog.Action.JOB_STARTED, request.user, f"job #{job.pk}: batch #{pk} on {queue}")
-    transaction.on_commit(lambda: process_batch.apply_async(args=[job.pk], queue=queue))
+    # Outside the transaction above, so the job row is committed before a worker can take it.
+    if not tasks.enqueue(job):
+        messages.error(request, "The job queue is unavailable, so the job was not started. "
+                                "Start it again in a few minutes; if it keeps failing, check Redis.")
+        return redirect("audit:batch", pk=pk)
     if not services.workers_online().get(queue):
         messages.warning(request, f"No {queue.upper()} worker is online: the job waits in the queue until one starts.")
     return redirect("audit:batch", pk=pk)

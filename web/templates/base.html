@@ -23,35 +23,36 @@
 <a class="skip-link" href="#main">Skip to content</a>
 {% block shell %}
 {% with url_name=request.resolver_match.url_name %}
-<div x-data="{ nav: false }" class="min-h-screen lg:flex">
+<div x-data="{ nav: false }" class="min-h-screen lg:flex" @keydown.escape.window="if (nav) { nav = false; $refs.openNav && $refs.openNav.focus() }">
   {% if user.is_authenticated %}
   {# Sidebar: fixed on large screens, a drawer on small ones. #}
   <div x-show="nav" x-cloak x-transition.opacity class="fixed inset-0 z-30 bg-black/40 lg:hidden" @click="nav = false"></div>
-  <aside class="fixed inset-y-0 left-0 z-40 flex w-72 -translate-x-full flex-col border-r border-line bg-surface px-4 py-5 transition-transform duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0"
-         :class="nav && 'translate-x-0'">
+  {# Closed on small screens the drawer is invisible too, so Tab never lands on links off screen. #}
+  <aside id="sidebar" class="invisible fixed inset-y-0 left-0 z-40 flex w-72 -translate-x-full flex-col border-r border-line bg-surface px-4 py-5 transition-[translate,visibility] duration-200 lg:visible lg:sticky lg:top-0 lg:h-screen lg:translate-x-0"
+         :class="nav && 'translate-x-0 !visible'">
     <div class="mb-6 flex items-center justify-between px-2">
       <a href="{% url 'home' %}" class="flex items-center gap-2.5 text-ink no-underline">
         <span class="flex size-9 items-center justify-center rounded-xl bg-primary text-on-primary">{% lucide "shield-check" size=19 %}</span>
         <span class="leading-tight"><span class="block text-[15px] font-semibold">ClaimGuard</span><span class="block text-xs text-muted">SHA post-payment audit</span></span>
       </a>
-      <button class="icon-btn size-9 lg:hidden" @click="nav = false" aria-label="Close menu">{% lucide "x" size=18 %}</button>
+      <button class="icon-btn size-9 lg:hidden" x-ref="closeNav" @click="nav = false; $refs.openNav.focus()" aria-label="Close menu">{% lucide "x" size=18 %}</button>
     </div>
 
     <nav class="flex-1 overflow-y-auto" aria-label="Main">
       <div class="nav-section !mt-0">Audit</div>
-      <a class="nav-link {% if url_name == 'overview' %}active{% endif %}" href="{% url 'audit:overview' %}">{% lucide "layout-dashboard" size=18 %} Overview</a>
+      <a class="nav-link {% if url_name == 'overview' %}active{% endif %}" {% if url_name == 'overview' %}aria-current="page"{% endif %} href="{% url 'audit:overview' %}">{% lucide "layout-dashboard" size=18 %} Overview</a>
       {% if user.is_auditor %}
-      <a class="nav-link {% if url_name == 'queue' or url_name == 'report' %}active{% endif %}" href="{% url 'audit:queue' %}">{% lucide "inbox" size=18 %} Review queue</a>
+      <a class="nav-link {% if url_name == 'queue' or url_name == 'report' %}active{% endif %}" {% if url_name == 'queue' or url_name == 'report' %}aria-current="page"{% endif %} href="{% url 'audit:queue' %}">{% lucide "inbox" size=18 %} Review queue</a>
       {% endif %}
       {% if user.is_administrator %}
       {# Separation of duties: the Administrator decides what is audited (feed, uploads, jobs); #}
       {# the Fraud Auditor judges the results and never sees the data pipeline or batches. #}
       <div class="nav-section">Data</div>
-      <a class="nav-link {% if url_name == 'pipeline' %}active{% endif %}" href="{% url 'ingestion:pipeline' %}">{% lucide "workflow" size=18 %} Data pipeline</a>
-      <a class="nav-link {% if url_name == 'batches' or url_name == 'batch' or url_name == 'upload' %}active{% endif %}" href="{% url 'audit:batches' %}">{% lucide "layers" size=18 %} Batches</a>
+      <a class="nav-link {% if url_name == 'pipeline' %}active{% endif %}" {% if url_name == 'pipeline' %}aria-current="page"{% endif %} href="{% url 'ingestion:pipeline' %}">{% lucide "workflow" size=18 %} Data pipeline</a>
+      <a class="nav-link {% if url_name == 'batches' or url_name == 'batch' or url_name == 'upload' %}active{% endif %}" {% if url_name == 'batches' or url_name == 'batch' or url_name == 'upload' %}aria-current="page"{% endif %} href="{% url 'audit:batches' %}">{% lucide "layers" size=18 %} Batches</a>
       <div class="nav-section">Models</div>
-      <a class="nav-link {% if url_name == 'model' %}active{% endif %}" href="{% url 'audit:model' %}">{% lucide "gauge" size=18 %} Model performance</a>
-      <a class="nav-link {% if url_name == 'feedback' %}active{% endif %}" href="{% url 'audit:feedback' %}">{% lucide "refresh-ccw" size=18 %} Feedback loop</a>
+      <a class="nav-link {% if url_name == 'model' %}active{% endif %}" {% if url_name == 'model' %}aria-current="page"{% endif %} href="{% url 'audit:model' %}">{% lucide "gauge" size=18 %} Model performance</a>
+      <a class="nav-link {% if url_name == 'feedback' %}active{% endif %}" {% if url_name == 'feedback' %}aria-current="page"{% endif %} href="{% url 'audit:feedback' %}">{% lucide "refresh-ccw" size=18 %} Feedback loop</a>
       <div class="nav-section">Administration</div>
       <a class="nav-link" href="{% url 'admin:accounts_user_changelist' %}">{% lucide "users" size=18 %} Users</a>
       <a class="nav-link" href="{% url 'admin:activity_activitylog_changelist' %}">{% lucide "scroll-text" size=18 %} Activity log</a>
@@ -76,23 +77,24 @@
   <div class="flex min-w-0 flex-1 flex-col">
     {% if user.is_authenticated %}
     <header class="sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-surface/85 px-4 py-3 backdrop-blur sm:px-8">
-      <button class="icon-btn lg:hidden" @click="nav = true" aria-label="Open menu">{% lucide "menu" size=18 %}</button>
+      <button class="icon-btn lg:hidden" x-ref="openNav" @click="nav = true; $nextTick(() => $refs.closeNav.focus())" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false" :aria-expanded="nav">{% lucide "menu" size=18 %}</button>
       <p class="m-0 hidden truncate text-lg font-semibold tracking-tight sm:block">Welcome back, {{ user.first_name|default:user.username }}</p>
       <div class="ml-auto flex items-center gap-2">
         {% include "partials/theme_toggle.html" %}
         <div x-data="{ open: false }" class="relative" @keydown.escape="open = false">
-          <button class="flex items-center gap-3 rounded-xl px-2 py-1.5 text-left transition hover:bg-hover" @click="open = !open" :aria-expanded="open" aria-haspopup="menu">
-            <span class="flex size-9 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent">{{ user.username|slice:":1"|upper }}</span>
+          <button class="flex items-center gap-3 rounded-xl px-2 py-1.5 text-left transition hover:bg-hover" @click="open = !open" aria-expanded="false" :aria-expanded="open" aria-controls="account-menu">
+            <span class="sr-only sm:hidden">{{ user.get_full_name|default:user.username }}, account menu</span>
+            <span class="flex size-9 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent-ink" aria-hidden="true">{{ user.username|slice:":1"|upper }}</span>
             <span class="hidden leading-tight sm:block"><span class="block text-sm font-medium">{{ user.get_full_name|default:user.username }}</span><span class="block text-xs text-muted">{{ user.role }}</span></span>
             <span class="text-muted">{% lucide "chevrons-up-down" size=16 %}</span>
           </button>
-          <div x-show="open" x-cloak x-transition.origin.top.right @click.outside="open = false" role="menu"
+          <div x-show="open" x-cloak x-transition.origin.top.right @click.outside="open = false" id="account-menu"
                class="absolute right-0 mt-2 w-56 rounded-2xl border border-line bg-surface p-1.5 shadow-card">
             <div class="px-3 py-2 text-xs text-muted">Signed in as <span class="font-medium text-ink">{{ user.username }}</span></div>
-            <a class="nav-link" role="menuitem" href="{% url 'account_change_password' %}">{% lucide "key-round" size=16 %} Change password</a>
-            <a class="nav-link" role="menuitem" href="{% url 'socialaccount_connections' %}">{% include "partials/google_logo.html" with size=16 %} Google sign-in</a>
+            <a class="nav-link" href="{% url 'account_change_password' %}">{% lucide "key-round" size=16 %} Change password</a>
+            <a class="nav-link" href="{% url 'socialaccount_connections' %}">{% include "partials/google_logo.html" with size=16 %} Google sign-in</a>
             <form method="post" action="{% url 'account_logout' %}">{% csrf_token %}
-              <button class="nav-link w-full" role="menuitem">{% lucide "log-out" size=16 %} Sign out</button></form>
+              <button class="nav-link w-full">{% lucide "log-out" size=16 %} Sign out</button></form>
           </div>
         </div>
       </div>

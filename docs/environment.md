@@ -47,17 +47,33 @@ reasoning for choosing LoRA/PEFT in the first place).
 
 ## Deployment / demonstration environment
 
-*(Web process not yet deployed.)* Since 26 Oct the Django application (branch `django`) uses
-a hosted database and job queue (below); the web process runs on the local machine, and the
-recommendation is to put it behind a Cloudflare Tunnel (`docs/hosting_guide.md`, GitHub #32). Until it is deployed and tested, describe
-the system as a local prototype; `research_writing.txt` line 994 forbids claiming public
-availability.
+**Deployed 9–10 Nov 2026 at https://claimsguard.tech** (runbook: `deploy/README.md`). One
+Oracle Cloud Always Free VM runs the whole platform; Colab runs GPU jobs on demand.
 
-The local machine reads Drive directly: the `rclone-gdrive` systemd user service mounts
+| Item | Configured value | Evidence |
+|---|---|---|
+| Host | Oracle Cloud Always Free, `VM.Standard.A1.Flex` (Ampere ARM), 2 OCPU, 12 GB, 100 GB boot volume, region UK South (`uk-london-1`), reserved public IP | `deploy/README.md` step 1 |
+| OS and runtime | Ubuntu 24.04 (aarch64), Docker with Compose; 4 GB swap; keys-only SSH with fail2ban | `deploy/scripts/01-bootstrap-vm.sh` |
+| Services (`deploy/compose.yaml`) | Caddy 2.10 (TLS, Cloudflare addresses only) · web (Django, gunicorn) · PostgreSQL 18 · Redis 7.4 (append-only) · sha-cdp (simulated claims platform, internal only) · worker-ingest (claims feed and beat) · worker-cpu (stage 1, SHAP, classifier) | compose file, memory limits per service |
+| Edge | Cloudflare (proxied DNS, Full (strict) TLS with a Cloudflare Origin Certificate, Always Use HTTPS, TLS ≥ 1.2) | `deploy/README.md` step 5 |
+| GPU jobs | `notebooks/05_gpu_worker.ipynb` on Colab (T4), reaching PostgreSQL :5432 and Redis :6380 over TLS with the deployment's own CA | `deploy/README.md` step 8 |
+| Model and data | Classifier, datasets and ICD-11 cache read from Google Drive, mounted at `/srv/gdrive` by rclone; the frozen classifier is also published on the Hugging Face Hub (`victorgpt0/claimguard-consistency-classifier`, tag `v1.0-evaluated`, TC-052) | `deploy/scripts/02-drive-mount.sh` |
+| Releases | `main` is deployed: a merged pull request runs the tests, then deploys over SSH with a forced-command key | `.github/workflows/deploy.yml`, `deploy/scripts/deploy.sh` |
+| Backups | Both databases nightly at 02:30 (Nairobi), 14 days on the VM and 30 on Drive | `deploy/scripts/06-backups.sh` |
+
+**Measured on the deployed release:** OS, CPU, memory, disk and image versions, response
+times, failure rates, restarts and dependency failures are recorded by
+`deploy/scripts/08-ops-check.sh` (TC-053, TC-054). *(Values to be filled in from its report.)*
+
+Constraints to state in Chapter 5: the Always Free shape limit (2 OCPU / 12 GB in total),
+Oracle's idle-reclamation rule for Always Free VMs (CPU, network and memory under 20% for 7
+days), and that GPU work depends on a Colab session being open. The synthetic data and the
+absence of real users limit what the operational figures say about production load.
+
+**Local machine:** reads Drive directly. The `rclone-gdrive` systemd user service mounts
 `MyDrive` at `~/gdrive` (rclone 1.75.2, VFS cache), and the local `config/config.yaml`
 points `data_dir`, `model_dir`, `artifacts_dir`, `experiments_dir` and `db_path` at
-`~/gdrive/claimguard/...`. Do not write to the SQLite database from Colab and the local
-machine at the same time. The remote uses rclone's shared Google client ID, which rclone
+`~/gdrive/claimguard/...`. The remote uses rclone's shared Google client ID, which rclone
 says is being retired during 2026; create an own client ID
 (https://rclone.org/drive/#making-your-own-client-id) if the mount stops authenticating.
 
@@ -72,8 +88,9 @@ tuned pipeline without narratives audited 900 claims in 98 s (TC-031).
 | WHO ICD-11 API | Code definition/inclusion/exclusion lookup (IR-01) | **Self-hosted**, not WHO's cloud API — `whoicd/icd-api` Docker image, run via `docker-compose.yml` at repo root. No OAuth2 credentials needed for local deployment (that's cloud-API-only). `acceptLicense=true` and `saveAnalytics` are container startup env vars, not per-request config. |
 | Hugging Face / OpenAI | LLM narrative generation (IR-02) | Provider choice: see `config/config.yaml` `llm_provider` |
 | Google Drive | Data/model/artifact persistence (DR-05) | See `implementation_roadmap.md` Section 3 for folder layout |
-| Neon (PostgreSQL 18.6) | Operational database of the Django application (IR-04) | Free tier, project `hidden-term-38223696`, branch `production`, AWS us-east-2. Pooled URL for the app and workers, direct URL for migrations; both in `.env` from `neon deploy`. About 0.3 s per query from the workstation. |
-| Upstash (Redis 8.4) | Job queue for the CPU and GPU workers (IR-08) | Free tier, TLS (`rediss://`), certificate verified. An idle Celery worker keeps polling, so stop workers when not processing. |
+| PostgreSQL 18 and Redis 7.4 on the VM | Operational database (IR-04) and job queue (IR-08) | Moved from Neon and Upstash on 9 Nov (`deploy/scripts/05-migrate-from-neon.sh`): Neon's US East region answered in about 0.3 s per query from Kenya. Reached by the Colab worker over TLS only. |
+| Cloudflare | DNS, TLS at the edge, the only path to the VM's port 443 | Free plan |
+| Hugging Face Hub | Public release of the frozen classifier | TC-052 |
 | Google (OpenID Connect) | Sign-in for linked accounts (IR-07) | OAuth client in Google Cloud Console; redirect URIs for each address the app is opened at. |
 
 ### Note: the ICD-11 container and Colab don't share a network

@@ -104,3 +104,22 @@ def process_batch(self, job_id: int) -> str:
             message=f"{summary['flagged_stage1']} flagged, {sum(summary['reported'].values())} queued for review, "
                     f"{summary['narratives']} narratives")
     return "succeeded"
+
+
+QUEUE_DOWN = "Could not reach the job queue (Redis), so the job was never sent to a worker"
+
+
+def enqueue(job: Job) -> bool:
+    """Send a committed job to its queue. If the broker cannot be reached, the job and its
+    batch are marked failed with the reason instead of being left "queued" forever (which
+    would also refuse every retry of the batch); the batch can be started again once the
+    queue is back. Returns whether the job was sent."""
+    try:
+        process_batch.apply_async(args=[job.pk], queue=job.queue)
+    except Exception as exc:
+        logger.exception("Job %s could not be queued", job.pk)
+        message = f"{QUEUE_DOWN}: {type(exc).__name__}: {exc}"
+        _update(job.pk, status=Job.Status.FAILED, finished_at=timezone.now(), message=message)
+        Batch.objects.filter(pk=job.batch_id).update(status=Batch.Status.FAILED, error=message)
+        return False
+    return True

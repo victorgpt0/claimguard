@@ -23,11 +23,14 @@
 
 :root {
   --canvas: #f4f4f5; --surface: #ffffff; --subtle: #f8f8f9; --hover: #f1f1f3; --line: #e8e8eb;
-  --line-strong: #d6d6db; --ink: #0f1115; --muted: #6b6f78; --faint: #9a9ea6;
+  --line-strong: #d6d6db; --ink: #0f1115; --muted: #62666f; --faint: #9a9ea6;
+  /* WCAG AA (contrast checked 10 Nov): --muted text 4.5:1 on every surface, --control a form
+     field's edge 3:1, --accent-ink orange text and the focus ring 4.5:1. */
+  --control: #868a93; --accent-ink: #c2410c;
   --primary: #0f1115; --on-primary: #ffffff;
   --accent: #f26b1d; --accent-soft: #fff1e8; --sky: #3aa8f0; --sky-soft: #eaf6fe;
   --sun: #f4c331; --teal: #2bb5a0; --violet: #8b7cf6;
-  --red: #d92d20; --red-soft: #fef1f0; --green: #13914f; --green-soft: #ecfbf2;
+  --red: #c4281c; --red-soft: #fef1f0; --green: #0b7a40; --green-soft: #ecfbf2;
   --amber: #b45309; --amber-soft: #fff7e6; --blue: #0b6bcb; --blue-soft: #eef5fd;
   --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 8px 24px -12px rgba(16, 24, 40, .10);
   color-scheme: light;
@@ -35,6 +38,7 @@
 [data-theme=dark] {
   --canvas: #0a0b0d; --surface: #131418; --subtle: #181a1f; --hover: #1e2026; --line: #24262d;
   --line-strong: #33363f; --ink: #f2f3f5; --muted: #9aa0ab; --faint: #6c717c;
+  --control: #787d88; --accent-ink: #ff8a3d;
   --primary: #f2f3f5; --on-primary: #0f1115;
   --accent: #ff8a3d; --accent-soft: #2e1b0f; --sky: #5bbcf7; --sky-soft: #0f2534;
   --sun: #f7cf55; --teal: #3fd0b9; --violet: #a194ff;
@@ -51,6 +55,7 @@
   --color-ink: var(--ink); --color-muted: var(--muted); --color-faint: var(--faint);
   --color-primary: var(--primary); --color-on-primary: var(--on-primary);
   --color-accent: var(--accent); --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink); --color-control: var(--control);
   --color-sky: var(--sky); --color-sky-soft: var(--sky-soft); --color-sun: var(--sun);
   --color-teal: var(--teal); --color-violet: var(--violet);
   --color-danger: var(--red); --color-danger-soft: var(--red-soft);
@@ -68,15 +73,15 @@
   h2 { @apply text-[1.02rem] font-semibold tracking-tight mb-2 flex flex-wrap items-center gap-2; }
   code { @apply rounded-md bg-hover px-1.5 py-0.5 text-[.85em]; }
   ::selection { background: var(--accent-soft); }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
 
   /* Form controls (the forms plugin resets them; these give the app's look). */
   input[type=text], input[type=password], input[type=email], input[type=number], input[type=search],
   input[type=date], input[type=file], select, textarea {
-    @apply rounded-xl border-line bg-surface text-ink text-sm shadow-none focus:border-accent focus:ring-2 focus:ring-accent/25;
+    @apply rounded-xl border-control bg-surface text-ink text-sm shadow-none focus:border-accent-ink focus:ring-2 focus:ring-accent-ink;
   }
   input[type=file] { @apply border p-2 file:mr-3 file:rounded-lg file:border-0 file:bg-hover file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink; }
-  input[type=checkbox], input[type=radio] { @apply border-line-strong bg-surface text-primary focus:ring-accent/30; }
+  input[type=checkbox], input[type=radio] { @apply border-control bg-surface text-primary focus:ring-accent-ink; }
   input[type=checkbox] { @apply rounded-md; }
 
   button { @apply cursor-pointer; }
@@ -124,11 +129,14 @@
   /* Tables. */
   table.list { @apply w-full border-separate border-spacing-0 text-sm; }
   table.list th { @apply border-b border-line bg-subtle px-3 py-2.5 text-left text-xs font-medium text-muted first:rounded-tl-xl last:rounded-tr-xl; }
-  table.list td { @apply border-b border-line px-3 py-2.5 align-middle; }
+  table.list td, table.list tbody th { @apply border-b border-line px-3 py-2.5 align-middle; }
+  /* Row headers look like cells; scope="row" is for screen readers. */
+  table.list tbody th { @apply bg-transparent text-left text-sm font-normal text-ink; }
   table.list tbody tr { @apply transition-colors hover:bg-subtle; }
-  table.list tbody tr:last-child td { @apply border-b-0; }
+  table.list tbody tr:last-child td, table.list tbody tr:last-child th { @apply border-b-0; }
   table.list .num { @apply text-right tabular-nums; }
-  @media (max-width: 700px) { table.list { @apply block overflow-x-auto; } }
+  /* Wide tables scroll inside their wrapper (.table-wrap, .table-scroll), never the page. */
+  .table-scroll { @apply overflow-x-auto; }
 
   /* Badges and tags. */
   .badge { @apply inline-flex items-center gap-1 rounded-full bg-hover px-2.5 py-0.5 align-middle text-xs font-medium text-ink; }
@@ -215,7 +223,7 @@
   .notice-success { @apply border-success/20 bg-success-soft text-success; }
 
   /* Decision choices on the report: one radio per decision, then a single submit. */
-  .choice-card { @apply flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-surface p-3.5 transition hover:bg-hover has-[:checked]:border-ink has-[:checked]:bg-subtle has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent/40; }
+  .choice-card { @apply flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-surface p-3.5 transition hover:bg-hover has-[:checked]:border-ink has-[:checked]:bg-subtle has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-ink; }
   .choice-card input { @apply mt-0.5; }
 
   .skip-link { @apply sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-xl focus:bg-primary focus:px-4 focus:py-2 focus:text-on-primary; }
@@ -223,7 +231,15 @@
   /* App shell. */
   .nav-link { @apply flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-muted no-underline transition hover:bg-hover hover:text-ink; }
   .nav-link.active { @apply bg-hover font-medium text-ink; }
-  .nav-section { @apply mt-6 mb-2 px-3 text-[11px] font-medium tracking-wider text-faint uppercase; }
+  .nav-section { @apply mt-6 mb-2 px-3 text-[11px] font-medium tracking-wider text-muted uppercase; }
 }
 
 [x-cloak] { display: none !important; }
+
+/* Motion off for people who ask for it (WCAG 2.3.3): no slides, fades, pulses or spinners. */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: .01ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important; scroll-behavior: auto !important;
+  }
+}

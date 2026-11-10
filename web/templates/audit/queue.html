@@ -9,17 +9,17 @@
   </div>
   <form method="get" class="flex flex-wrap items-end gap-3" aria-label="Filter the queue">
     <label class="flex flex-col gap-1 text-xs font-medium text-muted">Lane
-      <select name="lane" onchange="this.form.submit()">
+      <select name="lane">
         <option value="" {% if not lane %}selected{% endif %}>All lanes</option>
         <option value="text_inconsistent" {% if lane == "text_inconsistent" %}selected{% endif %}>Text inconsistent ({{ lane_counts.text_inconsistent }})</option>
         <option value="structural_anomaly" {% if lane == "structural_anomaly" %}selected{% endif %}>Structural anomaly ({{ lane_counts.structural_anomaly }})</option>
       </select></label>
     <label class="flex flex-col gap-1 text-xs font-medium text-muted">Order
-      <select name="order" onchange="this.form.submit()">
+      <select name="order">
         <option value="score" {% if order == "score" %}selected{% endif %}>Highest anomaly score</option>
         <option value="oldest" {% if order == "oldest" %}selected{% endif %}>Oldest first</option>
       </select></label>
-    <noscript><button>Apply</button></noscript>
+    <button type="submit" class="btn">Apply</button>
   </form>
 </div>
 
@@ -38,7 +38,7 @@
 {% if reports %}
   <div class="table-wrap">
   <table class="list">
-    <caption class="sr-only">Pending reports{% if lane %} in the {{ lane|cut:"_" }} lane{% endif %}, {% if order == "score" %}highest anomaly score first{% else %}oldest first{% endif %}</caption>
+    <caption class="sr-only">Pending reports{% if lane == "text_inconsistent" %} in the text-inconsistent lane{% elif lane == "structural_anomaly" %} in the structural-anomaly lane{% endif %}, {% if order == "score" %}highest anomaly score first{% else %}oldest first{% endif %}</caption>
     <thead><tr><th scope="col">Report</th><th scope="col">Lane</th><th scope="col">Claim</th><th scope="col">Provider</th><th scope="col">Code</th><th scope="col" class="num">Amount (KES)</th><th scope="col" class="num">Score</th></tr></thead>
     <tbody>{% for r in reports %}
       <tr><td><a href="{% url 'audit:report' r.pk %}?lane={{ lane }}&order={{ order }}">#{{ r.pk }}</a></td>

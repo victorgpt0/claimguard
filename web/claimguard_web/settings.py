@@ -79,8 +79,12 @@ TEMPLATES = [{
         "django.template.context_processors.request",
         "django.contrib.auth.context_processors.auth",
         "django.contrib.messages.context_processors.messages",
-    ]},
+    ],
+        # Icons hidden from assistive technology unless labelled (claimguard_web/icons.py).
+        "libraries": {"lucide": "claimguard_web.icons"}},
 }]
+# W003 says two modules are registered as "lucide": the override above is deliberate.
+SILENCED_SYSTEM_CHECKS = ["templates.W003"]
 
 # PostgreSQL in Docker and in deployment (DATABASE_URL); SQLite for a quick local run and tests.
 # Health checks reopen a connection that a hosted database (Neon scales to zero) has closed.

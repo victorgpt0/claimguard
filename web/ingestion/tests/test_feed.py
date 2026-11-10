@@ -108,6 +108,22 @@ def test_a_closed_period_runs_through_the_pipeline(platform, pipeline_files, db,
     assert report.claim.batch.source == "feed" and report.claim.claim_ref.startswith("LCLM")
 
 
+def test_a_closed_period_the_queue_cannot_take_fails_visibly(platform, pipeline_files, db, monkeypatch,
+                                                              django_capture_on_commit_callbacks):
+    from kombu.exceptions import OperationalError
+
+    def broker_down(*args, **kwargs):
+        raise OperationalError("Connection refused")
+    monkeypatch.setattr(tasks.process_batch, "apply_async", broker_down)
+    seed.load(claims_set(), platform)
+    clock.advance(platform, 500)
+    with django_capture_on_commit_callbacks(execute=True):
+        sync.sync()   # does not raise: the pull itself succeeded
+    assert Job.objects.exists() and set(Job.objects.values_list("status", flat=True)) == {"failed"}
+    assert set(Batch.objects.values_list("status", flat=True)) == {"failed"}
+    assert all(tasks.QUEUE_DOWN in b.error for b in Batch.objects.all())
+
+
 def test_bad_claims_are_quarantined_and_known_ones_skipped(platform, pipeline_files, db):
     seed.load(claims_set(bad_code_at=0), platform)
     upload = Batch.objects.create(name="earlier upload")

@@ -16,8 +16,8 @@
       {% for field in form %}
         <p>{% if field.widget_type == "checkbox" %}<label class="choice !my-0 font-normal" for="{{ field.id_for_label }}">{{ field }} {{ field.label }}</label>
           {% else %}<label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% endif %}
-          {% if field.help_text %}<span class="mt-1 block text-[13px] text-muted">{{ field.help_text }}</span>{% endif %}
-          {% for e in field.errors %}<span class="mt-1 block text-sm text-danger" role="alert">{{ e }}</span>{% endfor %}</p>
+          {% if field.help_text %}<span id="{{ field.auto_id }}_helptext" class="mt-1 block text-[13px] text-muted">{{ field.help_text }}</span>{% endif %}
+          {% if field.errors %}<span id="{{ field.auto_id }}_error" class="mt-1 block text-sm text-danger" role="alert">{% for e in field.errors %}{{ e }} {% endfor %}</span>{% endif %}</p>
       {% endfor %}
       <button type="submit" class="btn-primary" :disabled="busy">
         <span x-show="!busy">{% lucide "upload" size=16 %}</span>

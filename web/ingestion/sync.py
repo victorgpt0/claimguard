@@ -140,7 +140,7 @@ def batch_csv(batch: Batch) -> str:
 
 def close_batch(batch: Batch, queue: str | None, user=None) -> Job | None:
     """Freeze an open feed batch and, given a queue, queue its processing job."""
-    from audit.tasks import process_batch
+    from audit.tasks import enqueue
     csv = batch_csv(batch)
     batch.source_csv, batch.source_sha256 = csv, hashlib.sha256(csv.encode("utf-8")).hexdigest()
     batch.claims_count, batch.status, batch.closed_at = batch.claims.count(), Batch.Status.UPLOADED, timezone.now()
@@ -148,7 +148,7 @@ def close_batch(batch: Batch, queue: str | None, user=None) -> Job | None:
     if not queue:
         return None
     job = Job.objects.create(batch=batch, queue=queue, created_by=user)
-    transaction.on_commit(lambda: process_batch.apply_async(args=[job.pk], queue=queue))
+    transaction.on_commit(lambda: enqueue(job))
     return job
 
 

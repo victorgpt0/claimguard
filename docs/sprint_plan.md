@@ -82,7 +82,7 @@ Still open before it can be called closed:
 The brief now asks for a complete, usable, deployed and evaluated project, not only
 "approaching completion". Each expectation below is mapped to existing work or a gap.
 - [ ] **Traceability record:** objective or requirement → component → test or evaluation → result → evidence. `tests/test_plan.md` covers FR/NFR/DR; an objective-level table for Chapter 5, with unmet requirements explained, is missing.
-- [~] **Coherent, task-based interface:** consistent design system, navigation, roles, dark mode and sign-in done 2 Nov; empty, error and permission-denied states covered on every page (#63). Still to check: keyboard use, visible focus, contrast, status never shown by colour alone; mobile layout.
+- [~] **Coherent, task-based interface:** consistent design system, navigation, roles, dark mode and sign-in done 2 Nov; empty, error and permission-denied states covered on every page (#63). Keyboard use, visible focus, contrast, status never shown by colour alone and mobile layout checked and corrected 10 Nov (TC-055).
 - [x] **Honest uncertainty:** the report page showed the classifier's softmax output as "% confidence"; the brief says a raw score is not a calibrated probability. Relabelled "model score" with an explanation, CSV column `classifier_score` (2 Nov). Calibration not evaluated: Chapter 5 should say so. The narrative prompt still passes the score as "Classifier confidence" (frozen, evaluated pipeline); none of the 229 stored narratives repeats it.
 - [ ] **Feedback as training data:** the brief asks that feedback be reviewed before it becomes training data. Auditor decisions are the review, and FR-14 gates promotion; Chapter 5 should state this argument explicitly.
 - [x] **Operational release over HTTPS** with the real backend, database and model (#32, #39): Oracle Cloud Always Free VM (uk-london-1) at claimsguard.tech behind Cloudflare, PostgreSQL and Redis on the VM, deployed automatically from `main` (9–10 Nov; runbook `deploy/README.md`). Still to do for #39: record the tested setup in `docs/environment.md`, which still describes Neon and Upstash.
@@ -155,9 +155,9 @@ In order; tag `v1.0` (#44) only once the rest is done.
 - [x] TC-049 updated with the live `live-v1` ingestion (10 Nov). live-v1 is fully consumed: a GPU batch needs an upload (deployment pool) or a new `live-v2`.
 - [x] Model release: `evaluated_v1/` on the Hugging Face Hub with a model card and a pinned revision (10 Nov, TC-052).
 - [ ] Usability test with a representative user (TC-015, #24).
-- [ ] Failure scenarios on the deployed system: expired session, unavailable worker or database, duplicate submission; defects fixed and retested.
-- [ ] Operational evidence: response times, failure rates, a restart and an unavailable-dependency test; tested setup in `docs/environment.md` (#39).
-- [ ] Accessibility pass: keyboard use, visible focus, contrast, status not by colour alone, mobile layout.
+- [~] Failure scenarios on the deployed system: expired session, unavailable worker or database, duplicate submission; defects fixed and retested. Script ready (`deploy/scripts/08-ops-check.sh failures`, TC-053); two defects found and fixed while preparing it (job lost when Redis is down; start form hidden from Administrators). Run on the VM to do.
+- [~] Operational evidence: response times, failure rates, a restart and an unavailable-dependency test; tested setup in `docs/environment.md` (#39). Script ready (`timing`, `logs`, `restart`, `after-reboot`, TC-054); `docs/environment.md` rewritten for the Oracle deployment, measured values to fill in from the run.
+- [x] Accessibility pass: keyboard use, visible focus, contrast, status not by colour alone, mobile layout (10 Nov, TC-055). Real screen readers, Firefox/Safari and high zoom not tested.
 
 ---
 

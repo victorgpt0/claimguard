@@ -1,12 +1,12 @@
 {% load lucide %}{# Theme menu: light, dark or follow the system (static/js/theme.js). #}
 <div x-data="themeSwitch" class="relative" @keydown.escape="open = false">
-  <button type="button" class="icon-btn" @click="open = !open" :aria-expanded="open" aria-haspopup="menu" aria-label="Theme" title="Theme">
+  <button type="button" class="icon-btn" @click="open = !open" aria-expanded="false" :aria-expanded="open" aria-label="Theme" title="Theme">
     <span class="dark:hidden">{% lucide "sun" size=18 %}</span><span class="hidden dark:inline">{% lucide "moon" size=18 %}</span>
   </button>
-  <div x-show="open" x-cloak x-transition.origin.top.right @click.outside="open = false" role="menu"
+  <div x-show="open" x-cloak x-transition.origin.top.right @click.outside="open = false" role="group" aria-label="Theme"
        class="absolute right-0 z-50 mt-2 w-40 rounded-2xl border border-line bg-surface p-1.5 shadow-card">
-    <button type="button" role="menuitemradio" :aria-checked="choice === 'light'" class="nav-link w-full" :class="choice === 'light' && 'active'" @click="set('light')">{% lucide "sun" size=16 %} Light</button>
-    <button type="button" role="menuitemradio" :aria-checked="choice === 'dark'" class="nav-link w-full" :class="choice === 'dark' && 'active'" @click="set('dark')">{% lucide "moon" size=16 %} Dark</button>
-    <button type="button" role="menuitemradio" :aria-checked="choice === 'system'" class="nav-link w-full" :class="choice === 'system' && 'active'" @click="set('system')">{% lucide "monitor" size=16 %} System</button>
+    <button type="button" aria-pressed="false" :aria-pressed="choice === 'light'" class="nav-link w-full" :class="choice === 'light' && 'active'" @click="set('light')">{% lucide "sun" size=16 %} Light</button>
+    <button type="button" aria-pressed="false" :aria-pressed="choice === 'dark'" class="nav-link w-full" :class="choice === 'dark' && 'active'" @click="set('dark')">{% lucide "moon" size=16 %} Dark</button>
+    <button type="button" aria-pressed="false" :aria-pressed="choice === 'system'" class="nav-link w-full" :class="choice === 'system' && 'active'" @click="set('system')">{% lucide "monitor" size=16 %} System</button>
   </div>
 </div>
