@@ -209,6 +209,13 @@ for s, _, u in reqs:
     if s >= 500: errors[(s, u)] = errors.get((s, u), 0) + 1
 for (s, u), k in sorted(errors.items(), key=lambda kv: -kv[1])[:10]:
     print(f"  - {s} on `{u}`: {k}")
+client = {}
+for s, _, u in reqs:
+    if 400 <= s < 500: client[(s, u)] = client.get((s, u), 0) + 1
+if client:
+    print("- Most common 4xx answers (status, path):")
+for (s, u), k in sorted(client.items(), key=lambda kv: -kv[1])[:10]:
+    print(f"  - {s} on `{u}`: {k}")
 ' | tee -a "$REPORT"
     rep ""
     rep "## Jobs and claims-feed pulls (last 30 days, from the database)"
@@ -359,8 +366,13 @@ EOF
     restart_one "Whole stack (docker compose restart)"
     local wback; wback="$(wait_workers cpu,ingest 300)"
     after="$(helper counts)"
-    [[ "$before" = "$after" && "$wback" != timeout ]]; local t=$?
-    rep "- Workers online again ${wback}s after the stack was back. Rows before $before; after $after (unchanged expected). $(verdict $t)"
+    # The claims feed keeps pulling on its schedule, so ingestion_runs may grow; nothing may shrink
+    # and nothing else may change.
+    python3 -c "import json, sys
+b, a = json.loads(sys.argv[1]), json.loads(sys.argv[2])
+sys.exit(0 if all(a[k] == v for k, v in b.items() if k != 'ingestion_runs') and a['ingestion_runs'] >= b['ingestion_runs'] else 1)" \
+        "$before" "$after" && [ "$wback" != timeout ]; local t=$?
+    rep "- Workers online again ${wback}s after the stack was back. Rows before $before; after $after (unchanged expected, except scheduled feed pulls adding ingestion runs). $(verdict $t)"
     rep ""
     rep "Next: \`sudo reboot\`, log back in, then run this script with \`after-reboot\`."
     rep ""
