@@ -137,7 +137,7 @@ docker compose logs -f web worker-ingest worker-cpu
 
 - Fresh database only: `docker compose exec web python web/manage.py createsuperuser`.
 - Claims for the feed, once `live-v1` exists on Drive:
-  `docker compose run --rm sha-cdp python -m sha_cdp.seed /srv/gdrive/claimguard/data/<feed>.parquet`
+  `docker compose run --rm sha-cdp python -m sha_cdp.seed /srv/gdrive/claimguard/data/processed/live-v1/live.parquet`
 
 ## 8. The Colab GPU worker
 
