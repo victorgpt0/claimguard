@@ -52,7 +52,7 @@ Oracle Cloud Always Free VM runs the whole platform; Colab runs GPU jobs on dema
 
 | Item | Configured value | Evidence |
 |---|---|---|
-| Host | Oracle Cloud VM, region UK South (`uk-london-1`), reserved public IP. **Measured:** x86_64, 2 cores of an AMD EPYC 9J14, 11 GiB memory (9 GiB available), 4 GiB swap, 48 GB disk (32 GB free). This is an AMD Flex shape, not the Ampere A1 the runbook describes (and not Always Free; see below) | `08-ops-check.sh timing`, 10 Nov (TC-054) |
+| Host | Oracle Cloud VM, region UK South (`uk-london-1`), reserved public IP. **Measured:** x86_64, 2 cores of an AMD EPYC 9J14, 11 GiB memory (9 GiB available), 4 GiB swap, 48 GB disk (32 GB free). Shape `VM.Standard.E5.Flex` (AMD), not the Always Free Ampere A1 the runbook first described; paid for by the account's credit until May 2027 | `08-ops-check.sh timing`, 10 Nov (TC-054) |
 | OS and runtime | **Measured:** Ubuntu 24.04.5 LTS, kernel 7.0.0-1013-oracle; Docker 29.9.3, Compose v5.7.0; keys-only SSH with fail2ban | TC-054; `deploy/scripts/01-bootstrap-vm.sh` |
 | Services (`deploy/compose.yaml`) | **Measured:** Caddy 2.10 (TLS, Cloudflare addresses only) · web (Python 3.13.18, Django 5.2.18, gunicorn; image 1.2 GB) · PostgreSQL 18.6 · Redis 7.4.12 (append-only) · sha-cdp (simulated claims platform, internal only) · worker-ingest (claims feed and beat) · worker-cpu (stage 1, SHAP, classifier) | compose file, memory limits per service |
 | Edge | Cloudflare (proxied DNS, Full (strict) TLS with a Cloudflare Origin Certificate, Always Use HTTPS, TLS ≥ 1.2) | `deploy/README.md` step 5 |
@@ -72,9 +72,9 @@ platform or PostgreSQL stopped, the site kept answering (or showed its own error
 PostgreSQL) and recovered without intervention.
 
 Constraints to state in Chapter 5: GPU work depends on a Colab session being open, and the
-host's cost and lifetime (the VM is an AMD shape, so it is paid for or runs on trial credit;
-confirm which before stating it; on Always Free Ampere the limits would be 2 OCPU / 12 GB in
-total and Oracle's idle-reclamation rule). The synthetic data and the
+host's lifetime: the E5.Flex VM is not Always Free; the account's credit covers it until May
+2027, after which it must be paid for or the platform moved to an Always Free Ampere A1 VM
+(2 OCPU / 12 GB in total, subject to Oracle's idle-reclamation rule) by the same runbook. The synthetic data and the
 absence of real users limit what the operational figures say about production load.
 
 **Local machine:** reads Drive directly. The `rclone-gdrive` systemd user service mounts

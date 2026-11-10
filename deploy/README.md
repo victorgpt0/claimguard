@@ -24,6 +24,11 @@ Colab GPU worker ─TLS─▶ VM :5432 PostgreSQL, :6380 Redis (password + the d
 | 443 | anywhere in the security list; Caddy drops all but Cloudflare's addresses | the site |
 | 5432, 6380 | anywhere, TLS + password required | the Colab GPU worker |
 
+> **The deployed VM** is a `VM.Standard.E5.Flex` (AMD, x86_64, measured 10 Nov: 2 vCPUs,
+> 11 GiB, 48 GB disk), paid for by the account's credit until **May 2027**. It is not Always
+> Free. Before the credit ends, either pay for it or rebuild on Ampere A1 by these steps; the
+> images build for both x86_64 and ARM. The A1 notes below apply to that rebuild.
+
 ## Limits to respect
 
 - **Always Free Ampere A1 is 2 OCPU and 12 GB in total** (Oracle cut it from 4/24;
@@ -34,7 +39,7 @@ Colab GPU worker ─TLS─▶ VM :5432 PostgreSQL, :6380 Redis (password + the d
   stay under 20% for 7 days. A quiet demo can hit that. Upgrading the account to **Pay As You
   Go** removes the risk and costs nothing within the free limits; add a budget alert
   (Billing → Budgets, e.g. USD 1) so anything outside them is noticed.
-- **The trial's credits** end after 30 days; everything here is Always Free, so nothing stops.
+- **Credits:** the E5.Flex VM in use runs on the account's credit (until May 2027). On A1, everything here is Always Free, so nothing stops when credits end.
 
 ## 0. Before you start (laptop)
 
