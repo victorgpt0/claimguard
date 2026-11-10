@@ -39,6 +39,7 @@ def test_plan_rejects_a_folder_without_an_adapter(tmp_path, checkpoint):
 def test_dry_run_is_the_default_and_does_not_contact_the_hub(checkpoint, capsys, monkeypatch):
     ckpt, card = checkpoint
     monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.delenv("HF_WRITE_TOKEN", raising=False)
     with mock.patch("huggingface_hub.HfApi") as api:
         code = publish_model.main(["--repo-id", "u/m", "--checkpoint-dir", str(ckpt), "--card", str(card)])
     assert code == 0
@@ -50,12 +51,14 @@ def test_dry_run_is_the_default_and_does_not_contact_the_hub(checkpoint, capsys,
 def test_upload_needs_a_token(checkpoint, monkeypatch):
     ckpt, card = checkpoint
     monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.delenv("HF_WRITE_TOKEN", raising=False)
     assert publish_model.main(["--repo-id", "u/m", "--checkpoint-dir", str(ckpt),
                                "--card", str(card), "--upload"]) == 2
 
 
 def test_upload_commits_once_and_tags_that_commit(checkpoint, capsys, monkeypatch):
     ckpt, card = checkpoint
+    monkeypatch.delenv("HF_WRITE_TOKEN", raising=False)
     monkeypatch.setenv("HF_TOKEN", "hf_test")
     api = mock.Mock()
     api.create_commit.return_value = SimpleNamespace(oid="abc123")
@@ -72,3 +75,14 @@ def test_upload_commits_once_and_tags_that_commit(checkpoint, capsys, monkeypatc
     assert api.create_tag.call_args.kwargs["revision"] == "abc123"
     assert api.create_tag.call_args.kwargs["tag"] == "v1.0-evaluated"
     assert "abc123" in capsys.readouterr().out
+
+
+def test_upload_prefers_the_write_token(checkpoint, monkeypatch):
+    ckpt, card = checkpoint
+    monkeypatch.setenv("HF_TOKEN", "hf_read")
+    monkeypatch.setenv("HF_WRITE_TOKEN", "hf_write")
+    api = mock.Mock()
+    api.create_commit.return_value = SimpleNamespace(oid="abc123")
+    with mock.patch("huggingface_hub.HfApi", return_value=api) as cls:
+        publish_model.main(["--repo-id", "u/m", "--checkpoint-dir", str(ckpt), "--card", str(card), "--upload"])
+    cls.assert_called_once_with(token="hf_write")

@@ -177,8 +177,8 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-REPO = "<repo-id>"          # TODO(student): the Hub repo, e.g. <user>/claimguard-consistency-classifier
-REVISION = "<commit-sha>"   # the commit printed by src/release/publish_model.py (tag v1.0-evaluated)
+REPO = "victorgpt0/claimguard-consistency-classifier"
+REVISION = "v1.0-evaluated"   # the release tag; for a fully immutable pin use the commit sha it points to
 
 tokenizer = AutoTokenizer.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
 base = AutoModelForSequenceClassification.from_pretrained("emilyalsentzer/Bio_ClinicalBERT", num_labels=2)
