@@ -133,3 +133,42 @@ def test_a_batch_is_processed_once(administrator, pipeline_files, monkeypatch):
     assert Job.objects.count() == 1 and Job.objects.get().queue == "gpu"
     page = administrator.get(reverse("audit:batch", args=[batch.pk])).content.decode()
     assert "Waiting for a worker on the GPU queue" in page and "hx-get" in page
+
+
+def test_a_job_the_queue_cannot_take_fails_visibly_and_can_be_retried(administrator, pipeline_files, monkeypatch):
+    # Redis down: publishing raises. The job must not stay "queued" for ever, which would also
+    # refuse every retry of the batch.
+    from kombu.exceptions import OperationalError
+    monkeypatch.setattr("audit.services.workers_online", lambda: {})
+
+    def broker_down(*args, **kwargs):
+        raise OperationalError("Error 111 connecting to redis:6379. Connection refused.")
+    monkeypatch.setattr(tasks.process_batch, "apply_async", broker_down)
+    _upload(administrator, {})
+    batch = Batch.objects.get()
+    response = administrator.post(reverse("audit:start_job", args=[batch.pk]), {"queue": "cpu"}, follow=True)
+    assert response.status_code == 200
+    assert "The job queue is unavailable" in response.content.decode()
+    job, batch = Job.objects.get(), Batch.objects.get()
+    assert (job.status, batch.status) == ("failed", "failed") and tasks.QUEUE_DOWN in batch.error
+
+    sent = []
+    monkeypatch.setattr(tasks.process_batch, "apply_async", lambda *a, **k: sent.append(k["queue"]))
+    administrator.post(reverse("audit:start_job", args=[batch.pk]), {"queue": "cpu"})
+    assert sent == ["cpu"] and Job.objects.count() == 2 and Job.objects.latest("pk").status == "queued"
+
+
+def test_the_administrator_sees_the_start_form_and_only_then_are_workers_asked(administrator, pipeline_files,
+                                                                              monkeypatch):
+    # Administrators run batches (#55); the form was once shown only to Auditors, who cannot
+    # open the page, so an uploaded batch could not be started from it.
+    asked = []
+    monkeypatch.setattr("audit.services.workers_online", lambda: asked.append(1) or {"gpu": ["colab"]})
+    _upload(administrator, {})
+    batch = Batch.objects.get()
+    page = administrator.get(reverse("audit:batch", args=[batch.pk])).content.decode()
+    assert reverse("audit:start_job", args=[batch.pk]) in page and "Start processing" in page
+    assert asked == [1] and "worker online" in page
+    Batch.objects.filter(pk=batch.pk).update(status=Batch.Status.PROCESSED)
+    page = administrator.get(reverse("audit:batch", args=[batch.pk])).content.decode()
+    assert "Start processing" not in page and asked == [1]
