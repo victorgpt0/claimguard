@@ -195,9 +195,14 @@ verdict = ["consistent", "inconsistent"][int(scores.argmax())]
 
 ## Citation
 
-<!-- TODO(student): add the final project report's citation once submitted. -->
-Gichuru, V. K. (2026). *LLM-Assisted Anomaly Detection for Post-Payment Fraud Audit: A
-Case Study of Kenya's Social Health Authority*. ICS Project II, Strathmore University.
+Project report:
+Gichuru, V. K. (2026). *LLM-assisted anomaly detection for post-payment fraud audit: A case
+study of Kenya's Social Health Authority* [Unpublished undergraduate project report, ICS
+Project II]. Strathmore University.
+
+This model:
+Gichuru, V. K. (2026). *ClaimGuard semantic consistency classifier* (Version v1.0-evaluated)
+[LoRA adapter]. Hugging Face. https://huggingface.co/victorgpt0/claimguard-consistency-classifier
 
 Base model: Alsentzer, E. et al. (2019). Publicly Available Clinical BERT Embeddings.
 *Proceedings of the 2nd Clinical Natural Language Processing Workshop*.
