@@ -51,14 +51,14 @@ def test_an_imported_batch_without_a_run_log_is_summarised(reports):
     assert (s["flagged"], s["queued"], s["flagged_by"], s["narrative_failures"], s["settings"]) == (2, 2, None, None, {})
 
 
-def test_the_batch_page_shows_the_summary(auditor, batch):
-    page = auditor.get(reverse("audit:batch", args=[batch.pk])).content.decode()
+def test_the_batch_page_shows_the_summary(admin, batch):
+    page = admin.get(reverse("audit:batch", args=[batch.pk])).content.decode()
     assert "Batch summary" in page and "KES 60,000" in page and "chart-funnel" in page
     assert "Download summary (Markdown)" in page and "v0.6-20k" in page
 
 
-def test_markdown_summary_has_every_section(auditor, batch):
-    response = auditor.get(reverse("audit:batch_summary", args=[batch.pk]))
+def test_markdown_summary_has_every_section(admin, batch):
+    response = admin.get(reverse("audit:batch_summary", args=[batch.pk]))
     text = response.content.decode()
     assert response.status_code == 200 and response["Content-Type"].startswith("text/markdown")
     assert f'batch_{batch.pk}_' in response["Content-Disposition"]
@@ -70,8 +70,8 @@ def test_markdown_summary_has_every_section(auditor, batch):
     assert ActivityLog.objects.get(action="download").detail == f"batch #{batch.pk}: summary (Markdown)"
 
 
-def test_reports_csv_has_one_row_per_report(auditor, batch):
-    response = auditor.get(reverse("audit:batch_reports", args=[batch.pk]))
+def test_reports_csv_has_one_row_per_report(admin, batch):
+    response = admin.get(reverse("audit:batch_reports", args=[batch.pk]))
     rows = list(csv.DictReader(io.StringIO(response.content.decode())))
     assert response.status_code == 200 and list(rows[0]) == CSV_COLUMNS and len(rows) == 2
     first = rows[0]
@@ -81,23 +81,21 @@ def test_reports_csv_has_one_row_per_report(auditor, batch):
     assert rows[1]["reviewer"] == "reviewer" and rows[1]["decision"] == "rejected"
 
 
-def test_csv_cells_cannot_become_formulas(auditor, batch):
+def test_csv_cells_cannot_become_formulas(admin, batch):
     report = AuditReport.objects.filter(claim__batch=batch).first()
     report.llm_narrative = "=cmd|' /C calc'!A0"
     report.save()
-    text = auditor.get(reverse("audit:batch_reports", args=[batch.pk])).content.decode()
+    text = admin.get(reverse("audit:batch_reports", args=[batch.pk])).content.decode()
     assert "'=cmd" in text and ",=cmd" not in text
 
 
-def test_administrators_can_download_too(make_user, batch):
-    from django.test import Client
-    client = Client()
-    client.force_login(make_user("admin", role="Administrator"))
-    assert client.get(reverse("audit:batch_reports", args=[batch.pk])).status_code == 200
+def test_auditors_cannot_open_batches_or_their_downloads(auditor, batch):
+    for name in ("audit:batch", "audit:batch_summary", "audit:batch_reports"):
+        assert auditor.get(reverse(name, args=[batch.pk])).status_code == 403
 
 
-def test_an_unprocessed_batch_has_no_summary(auditor, db):
+def test_an_unprocessed_batch_has_no_summary(admin, db):
     batch = Batch.objects.create(name="new.csv")
-    assert auditor.get(reverse("audit:batch_summary", args=[batch.pk])).status_code == 302
-    assert auditor.get(reverse("audit:batch_reports", args=[batch.pk])).status_code == 302
-    assert "Batch summary" not in auditor.get(reverse("audit:batch", args=[batch.pk])).content.decode()
+    assert admin.get(reverse("audit:batch_summary", args=[batch.pk])).status_code == 302
+    assert admin.get(reverse("audit:batch_reports", args=[batch.pk])).status_code == 302
+    assert "Batch summary" not in admin.get(reverse("audit:batch", args=[batch.pk])).content.decode()

@@ -43,9 +43,12 @@
       {% if user.is_auditor %}
       <a class="nav-link {% if url_name == 'queue' or url_name == 'report' %}active{% endif %}" href="{% url 'audit:queue' %}">{% lucide "inbox" size=18 %} Review queue</a>
       {% endif %}
+      {% if user.is_administrator %}
+      {# Separation of duties: the Administrator decides what is audited (feed, uploads, jobs); #}
+      {# the Fraud Auditor judges the results and never sees the data pipeline or batches. #}
+      <div class="nav-section">Data</div>
       <a class="nav-link {% if url_name == 'pipeline' %}active{% endif %}" href="{% url 'ingestion:pipeline' %}">{% lucide "workflow" size=18 %} Data pipeline</a>
       <a class="nav-link {% if url_name == 'batches' or url_name == 'batch' or url_name == 'upload' %}active{% endif %}" href="{% url 'audit:batches' %}">{% lucide "layers" size=18 %} Batches</a>
-      {% if user.is_administrator %}
       <div class="nav-section">Models</div>
       <a class="nav-link {% if url_name == 'model' %}active{% endif %}" href="{% url 'audit:model' %}">{% lucide "gauge" size=18 %} Model performance</a>
       <a class="nav-link {% if url_name == 'feedback' %}active{% endif %}" href="{% url 'audit:feedback' %}">{% lucide "refresh-ccw" size=18 %} Feedback loop</a>
@@ -58,13 +61,13 @@
     {# Role-specific call to action, as in the design's bottom card. #}
     <div class="mt-4 rounded-2xl border border-line bg-subtle p-4">
       {% if user.is_auditor %}
+        <div class="mb-1 flex items-center gap-2 text-sm font-semibold">{% lucide "inbox" size=16 %} Claims to review</div>
+        <p class="mb-3 text-[13px] leading-snug text-muted">Flagged claims wait in the queue, highest anomaly score first.</p>
+        <a class="btn-primary w-full" href="{% url 'audit:queue' %}">Open review queue</a>
+      {% else %}
         <div class="mb-1 flex items-center gap-2 text-sm font-semibold">{% lucide "upload" size=16 %} New claims batch</div>
         <p class="mb-3 text-[13px] leading-snug text-muted">Upload a CSV; every line is checked before anything is stored.</p>
         <a class="btn-primary w-full" href="{% url 'audit:upload' %}">Upload batch</a>
-      {% else %}
-        <div class="mb-1 flex items-center gap-2 text-sm font-semibold">{% lucide "sparkles" size=16 %} Feedback loop</div>
-        <p class="mb-3 text-[13px] leading-snug text-muted">Auditor decisions retrain the classifier once the trigger is reached.</p>
-        <a class="btn-primary w-full" href="{% url 'audit:feedback' %}">View progress</a>
       {% endif %}
     </div>
   </aside>

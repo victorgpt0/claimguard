@@ -6,10 +6,14 @@ Administrator linked to the user (SOCIALACCOUNT_EMAIL_AUTHENTICATION connects it
 use). Any other Google account is refused."""
 from __future__ import annotations
 
+import logging
+
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 
 from activity.models import ActivityLog
+
+logger = logging.getLogger(__name__)
 
 
 class NoSignupAccountAdapter(DefaultAccountAdapter):
@@ -23,3 +27,12 @@ class LinkedAccountsOnlyAdapter(DefaultSocialAccountAdapter):
         email = (sociallogin.user.email or "").lower() or "a Google account"
         ActivityLog.record(ActivityLog.Action.SIGN_IN_REFUSED, detail=email)
         return False
+
+    def on_authentication_error(self, request, provider, error=None, exception=None, extra_context=None):
+        # allauth's "Third-Party Login Failure" page gives no reason. Put it in the server log
+        # (and so the container's logs): the error code (e.g. "cancelled", "denied", "unknown")
+        # and the exception, such as a state mismatch or a failed token exchange.
+        logger.warning("Google sign-in failed: provider=%s error=%s exception=%r",
+                       getattr(provider, "id", provider), error, exception)
+        super().on_authentication_error(request, provider, error=error, exception=exception,
+                                        extra_context=extra_context)

@@ -1,8 +1,9 @@
 """The Data pipeline page (#66): where claims come from and where they are now. The flow from
 the claims platform to the review queue with live counts, the audit periods (open batches
 collecting claims, closed ones being processed), every pull, and the quarantined claims.
-Fraud Auditors can pull now and close a period early; Administrators also operate the
-simulation (pause the feed, move the platform's clock)."""
+The page is the Administrator's alone (separation of duties: whoever decides what is audited
+does not judge the results): pull now, close a period early, pause the feed, move the
+platform's clock. Fraud Auditors never see it."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -13,7 +14,7 @@ from django.db.models import Count, Q
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 
-from accounts.roles import administrator_required, any_role_required, auditor_required
+from accounts.roles import administrator_required
 from activity.models import ActivityLog
 from audit.models import AuditReport, Batch, Claim, Job
 
@@ -90,12 +91,12 @@ CLOCK_BUTTONS = [("advance_week", "Advance a week", "skip-forward"), ("advance_m
                  ("play", "Play (15 days a minute)", "play"), ("pause", "Pause clock", "pause")]
 
 
-@any_role_required
+@administrator_required
 def pipeline(request):
     return render(request, "ingestion/pipeline.html", {**_context(), "clock_buttons": CLOCK_BUTTONS})
 
 
-@any_role_required
+@administrator_required
 def pipeline_live(request):
     """The part of the page that HTMX refreshes every few seconds."""
     return render(request, "ingestion/live.html", _context())
@@ -115,7 +116,7 @@ def _pull(request) -> None:
         messages.error(request, f"The pull {run.status}: {run.error}")
 
 
-@any_role_required
+@administrator_required
 def sync_now(request):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -124,7 +125,7 @@ def sync_now(request):
     return redirect("ingestion:pipeline")
 
 
-@auditor_required
+@administrator_required
 def close_now(request, pk: int):
     """Close an open audit period before it ends, e.g. to audit a month early."""
     if request.method != "POST":

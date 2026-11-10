@@ -86,8 +86,9 @@ ingestion:
 - the audit periods with their claims, flags, reports and job;
 - the pulls and the quarantine.
 
-Auditors can pull now and close a period early. Administrators also pause scheduled pulls
-and move the platform's clock; every move is followed by a pull. The page refreshes every
+The page is the Administrator's alone (separation of duties, 10 Nov: Fraud Auditors see only
+the overview and the review queue). The Administrator can pull now, close a period early,
+pause scheduled pulls and move the platform's clock; every move is followed by a pull. The page refreshes every
 5 seconds.
 
 ## Running the demonstration

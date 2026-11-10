@@ -9,9 +9,9 @@
   </div>
   <div class="flex flex-wrap gap-2">
     {% if user.is_auditor %}
-      <a class="btn" href="{% url 'audit:upload' %}">{% lucide "upload" size=16 %} Upload batch</a>
       {% if total %}<a class="btn-primary" href="{% url 'audit:queue' %}">{% lucide "inbox" size=16 %} Open review queue</a>{% endif %}
     {% elif user.is_administrator %}
+      <a class="btn" href="{% url 'audit:upload' %}">{% lucide "upload" size=16 %} Upload batch</a>
       <a class="btn" href="{% url 'audit:feedback' %}">{% lucide "refresh-ccw" size=16 %} Feedback loop</a>
       <a class="btn-primary" href="{% url 'audit:model' %}">{% lucide "gauge" size=16 %} Model performance</a>
     {% endif %}
@@ -24,8 +24,8 @@
     <span class="kpi-icon size-12 bg-accent-soft text-accent">{% lucide "inbox" size=22 %}</span>
     <h2 class="mb-0 justify-center">No audit reports yet</h2>
     <p class="m-0 max-w-md text-sm text-muted">Reports appear here once a claims batch has been through the pipeline.
-      {% if user.is_auditor %}Upload a batch to start.{% else %}A Fraud Auditor uploads batches; nothing needs doing here until then.{% endif %}</p>
-    {% if user.is_auditor %}<a class="btn-primary" href="{% url 'audit:upload' %}">{% lucide "upload" size=16 %} Upload batch</a>{% endif %}
+      {% if user.is_auditor %}The Administrator loads claims for audit; nothing needs doing here until then.{% else %}Upload a batch, or let the claims feed close an audit period, to start.{% endif %}</p>
+    {% if user.is_administrator %}<a class="btn-primary" href="{% url 'audit:upload' %}">{% lucide "upload" size=16 %} Upload batch</a>{% endif %}
   </section>
 {% else %}
   <div class="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

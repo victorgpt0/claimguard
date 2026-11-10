@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-head">
   <div><h1>Batches</h1><p>Uploaded claims files, their processing status and summaries.</p></div>
-  {% if user.is_auditor %}<a class="btn-primary" href="{% url 'audit:upload' %}">{% lucide "upload" size=16 %} Upload a claims batch</a>{% endif %}
+  <a class="btn-primary" href="{% url 'audit:upload' %}">{% lucide "upload" size=16 %} Upload a claims batch</a>
 </div>
 <section class="card">
 {% if batches %}
@@ -21,8 +21,8 @@
   <div class="empty-state">
     <span class="kpi-icon size-12 bg-accent-soft text-accent">{% lucide "layers" size=22 %}</span>
     <h2>No batches yet</h2>
-    <p>{% if user.is_auditor %}Upload a CSV of claims; every line is checked before anything is stored.{% else %}A Fraud Auditor uploads claims batches; they will be listed here.{% endif %}</p>
-    {% if user.is_auditor %}<a class="btn-primary" href="{% url 'audit:upload' %}">{% lucide "upload" size=16 %} Upload a claims batch</a>{% endif %}
+    <p>Upload a CSV of claims; every line is checked before anything is stored. Batches from the claims feed are listed here too.</p>
+    <a class="btn-primary" href="{% url 'audit:upload' %}">{% lucide "upload" size=16 %} Upload a claims batch</a>
   </div>
 {% endif %}
 </section>
