@@ -96,15 +96,16 @@
       <div><h2>Next in the queue</h2><p>Pending reports with the highest anomaly scores.</p></div>
       <a class="btn-ghost" href="{% url 'audit:queue' %}">View all {% lucide "arrow-right" size=15 %}</a>
     </div>
-    <table class="list">
-      <thead><tr><th>Claim</th><th>Lane</th><th>Provider</th><th>ICD-11</th><th class="num">Score</th></tr></thead>
+    <div class="table-wrap"><table class="list">
+      <caption class="sr-only">Next pending reports, highest anomaly score first</caption>
+      <thead><tr><th scope="col">Claim</th><th scope="col">Lane</th><th scope="col">Provider</th><th scope="col">ICD-11</th><th scope="col" class="num">Score</th></tr></thead>
       <tbody>{% for r in next_up %}
         <tr><td><a href="{% url 'audit:report' r.pk %}">{{ r.claim.claim_ref }}</a></td>
           <td>{% include "audit/lane_badge.html" with lane=r.lane %}</td>
           <td>{{ r.claim.provider_id }}</td><td><code>{{ r.claim.icd11_code }}</code></td>
           <td class="num">{{ r.claim.anomaly_score|floatformat:3 }}</td></tr>
       {% endfor %}</tbody>
-    </table>
+    </table></div>
   </section>
   {% endif %}
 

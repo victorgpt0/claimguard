@@ -53,7 +53,7 @@
   <table class="list">
     <caption class="sr-only">Audit periods of the claims feed, newest first</caption>
     <thead><tr><th scope="col">Period</th><th scope="col">Status</th><th scope="col" class="num">Claims</th><th scope="col" class="num">Flagged</th>
-      <th scope="col" class="num">Reports</th><th scope="col" class="num">Pending</th><th scope="col">Detection</th><th scope="col"></th></tr></thead>
+      <th scope="col" class="num">Reports</th><th scope="col" class="num">Pending</th><th scope="col">Detection</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
     <tbody>{% for b in periods %}<tr>
       <td><a href="{% url 'audit:batch' b.pk %}">{{ b.label }}</a></td>
       <td><span class="badge status-{{ b.status }}">{% if b.status == "open" %}collecting{% elif b.status == "uploaded" %}closed{% else %}{{ b.get_status_display|lower }}{% endif %}</span></td>

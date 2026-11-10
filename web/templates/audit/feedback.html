@@ -20,14 +20,14 @@
 <p class="caption">Approve and reject decisions become labelled examples for the classifier: a rejection is labelled consistent, an approval of an inconsistent verdict inconsistent. Approving a consistent verdict and escalating add nothing.</p>
 
 <section class="card"><h2>Retraining history</h2>
-{% if history %}<div class="table-wrap"><table class="list"><thead><tr><th>Run</th><th>Checkpoint</th><th class="num">Examples</th><th class="num">Candidate F1</th><th class="num">Candidate recall</th><th class="num">Active F1</th><th>Promoted</th></tr></thead>
+{% if history %}<div class="table-wrap"><table class="list"><caption class="sr-only">Retraining runs, newest first</caption><thead><tr><th scope="col">Run</th><th scope="col">Checkpoint</th><th scope="col" class="num">Examples</th><th scope="col" class="num">Candidate F1</th><th scope="col" class="num">Candidate recall</th><th scope="col" class="num">Active F1</th><th scope="col">Promoted</th></tr></thead>
 <tbody>{% for row in history %}<tr><td>{{ row.run_at|slice:":16" }}</td><td>{{ row.checkpoint }}</td><td class="num">{{ row.feedback_examples }}{% if row.simulated_examples %} ({{ row.simulated_examples }} simulated){% endif %}</td>
 <td class="num">{{ row.candidate_metrics.f1|floatformat:3 }}</td><td class="num">{{ row.candidate_metrics.recall|floatformat:3 }}</td><td class="num">{{ row.active_metrics.f1|floatformat:3 }}</td><td>{% if row.promoted %}<span class="badge status-succeeded">Promoted</span>{% else %}<span class="badge">Kept active</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
 <p class="caption mt-3 mb-0">F1 and recall on the held-out test set, the promotion gate (FR-14).</p>
 {% else %}<p class="caption mb-0">No retraining run yet.</p>{% endif %}</section>
 
 {% if examples %}<section class="card"><h2>Latest feedback examples</h2>
-<div class="table-wrap"><table class="list"><thead><tr><th>Claim</th><th>Code</th><th>Verdict</th><th>Decision</th><th>Label</th></tr></thead>
+<div class="table-wrap"><table class="list"><caption class="sr-only">Latest feedback examples</caption><thead><tr><th scope="col">Claim</th><th scope="col">Code</th><th scope="col">Verdict</th><th scope="col">Decision</th><th scope="col">Label</th></tr></thead>
 <tbody>{% for e in examples %}<tr><td>{{ e.claim_id }}</td><td>{{ e.icd11_code }}</td><td>{{ e.classifier_verdict }}</td><td>{{ e.auditor_decision }}{% if e.simulated %} (simulated){% endif %}</td><td>{{ e.label }}</td></tr>{% endfor %}</tbody></table></div>
 </section>{% endif %}
 {% endif %}
