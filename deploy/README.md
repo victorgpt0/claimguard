@@ -27,7 +27,8 @@ Colab GPU worker ─TLS─▶ VM :5432 PostgreSQL, :6380 Redis (password + the d
 > **The deployed VM** is a `VM.Standard.E5.Flex` (AMD, x86_64, measured 10 Nov: 2 vCPUs,
 > 11 GiB, 48 GB disk), paid for by the account's credit until **May 2027**. It is not Always
 > Free. Before the credit ends, either pay for it or rebuild on Ampere A1 by these steps; the
-> images build for both x86_64 and ARM. The A1 notes below apply to that rebuild.
+> images are built on the VM itself, but an ARM build has not been tested. The A1 notes below
+> apply to that rebuild.
 
 ## Limits to respect
 
