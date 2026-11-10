@@ -63,9 +63,12 @@ def load(frame: pd.DataFrame, eng, seed: int = 2026, replace: bool = False) -> i
     with eng.begin() as conn:
         if replace:
             conn.execute(delete(db.claims))
-            conn.execute(delete(db.sim_clock))   # restart the clock before the first payment
         elif conn.execute(select(func.count()).select_from(db.claims)).scalar():
             raise ValueError("the platform already holds claims; pass --replace to start over")
+        # Restart the clock before the first payment. Also on a first load: a read of the empty
+        # platform (the ingest worker polls it) creates the clock at today's date, which would
+        # count every claim as already paid.
+        conn.execute(delete(db.sim_clock))
         conn.execute(insert(db.claims), records)
     return len(records)
 

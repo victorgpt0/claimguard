@@ -105,3 +105,19 @@ def test_stats_count_what_has_happened_by_the_clock(platform):
     stats = client.get("/api/v1/stats", headers=READ).json()
     assert stats["claims_held"] == 60 and stats["lodged"] >= stats["approved"] >= stats["paid"] > 0
     assert stats["awaiting_payment"] == stats["lodged"] - stats["paid"]
+
+
+def test_clock_read_before_seeding_does_not_release_every_claim(tmp_path, monkeypatch):
+    # On a fresh deployment the ingest worker polls the empty platform before anyone seeds it.
+    # That read creates the clock at today's date; the first load must reset it, or every claim
+    # is already "paid" and all audit periods close at once.
+    monkeypatch.setenv("SHA_CDP_DATABASE_URL", f"sqlite:///{tmp_path / 'cdp.sqlite'}")
+    db.engine.cache_clear()
+    eng = db.engine()
+    db.metadata.create_all(eng)
+    assert clock.now(eng).year >= 2026          # empty platform: the clock starts at today
+    seed.load(claims_set(), eng)
+    with eng.connect() as conn:
+        first_payment = conn.execute(db.claims.select().order_by(db.claims.c.paid_at)).first().paid_at
+    assert clock.now(eng) < first_payment     # nothing paid yet: the periods close as the clock moves
+    db.engine.cache_clear()
