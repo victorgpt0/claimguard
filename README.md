@@ -126,9 +126,10 @@ local PostgreSQL and Redis; the container cannot see the rclone Drive mount (FUS
 docker-compose.yml), so uploads, ICD-11 definitions and the monitoring pages need the
 `.venv` setup, which reads Drive directly.
 
-**Roles.** The Fraud Auditor sees Overview, Review queue and Batches (upload, processing,
-summaries). The Administrator sees Overview, Batches (summaries only), Model performance,
-Feedback loop, and Users and Activity log in Django's admin site, where accounts are
+**Roles** (a separation of duties: whoever decides what is audited does not judge the
+results). The Fraud Auditor sees Overview and Review queue (report and decision). The
+Administrator sees Overview, Data pipeline, Batches (upload, processing, summaries), Model
+performance, Feedback loop, and Users and Activity log in Django's admin site, where accounts are
 created, deactivated (never deleted), given a role and linked to a Google email, and the
 log is filtered and exported. Everyone changes their own password from their name in the
 top bar. A session idle for 30 minutes (`SESSION_TIMEOUT_MINUTES`) is signed out.
@@ -139,7 +140,7 @@ redirect URI, e.g. `http://localhost:8000/accounts/google/login/callback/` and t
 `127.0.0.1` (Google treats them as different; a missing one gives `redirect_uri_mismatch`).
 Only accounts whose email the Administrator has linked can sign in with Google.
 
-**Batches and jobs.** The Fraud Auditor uploads a claims CSV under Batches (a template is
+**Batches and jobs.** The Administrator uploads a claims CSV under Batches (a template is
 offered, at most 2,000 claims and 10 MB); every line is checked and nothing is stored unless
 all pass, and held-out test claims are always refused (DR-08). Processing runs as a Celery
 job on one of two queues, with live progress on the batch page:
