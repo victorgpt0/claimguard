@@ -57,7 +57,7 @@
     <div>
       <h3 class="mb-2 text-sm font-semibold" id="review-progress">Review progress</h3>
       <div class="table-scroll"><table class="list" aria-labelledby="review-progress">
-        <thead><tr><th scope="col">Reviewer</th><th scope="col" class="num">Approved</th><th scope="col" class="num">Rejected</th><th scope="col" class="num">Escalated</th></tr></thead>
+        <thead><tr><th scope="col">Reviewer</th><th scope="col" class="num">Fraud confirmed</th><th scope="col" class="num">Flag dismissed</th><th scope="col" class="num">Escalated</th></tr></thead>
         <tbody>
           {% for name, d in s.reviewers.items %}<tr><td>{{ name }}</td><td class="num">{{ d.approved }}</td><td class="num">{{ d.rejected }}</td><td class="num">{{ d.escalated }}</td></tr>{% endfor %}
           <tr><td><strong>All</strong> ({{ s.review.pending }} pending)</td><td class="num">{{ s.review.approved }}</td><td class="num">{{ s.review.rejected }}</td><td class="num">{{ s.review.escalated }}</td></tr>

@@ -69,13 +69,13 @@
     <label class="choice-card">
       <input type="radio" name="decision" value="{{ d }}" required x-model="choice">
       <span><span class="flex items-center gap-1.5 text-sm font-semibold {% if d == 'approved' %}text-danger{% elif d == 'rejected' %}text-success{% endif %}">
-          {% if d == "approved" %}{% lucide "shield-alert" size=15 %} Approve{% elif d == "rejected" %}{% lucide "circle-check-big" size=15 %} Reject{% else %}{% lucide "arrow-up-right" size=15 %} Escalate{% endif %}</span>
+          {% if d == "approved" %}{% lucide "shield-alert" size=15 %} Confirm fraud{% elif d == "rejected" %}{% lucide "circle-check-big" size=15 %} Dismiss flag{% else %}{% lucide "arrow-up-right" size=15 %} Escalate{% endif %}</span>
         <span class="block text-[13px] text-muted">{% if d == "approved" %}The flag is right: the claim looks fraudulent.{% elif d == "rejected" %}A false positive: the claim is legitimate.{% else %}Needs a senior reviewer; adds no feedback example.{% endif %}</span></span>
     </label>
     {% endfor %}
   </fieldset>
   <button type="submit" class="btn-primary mt-4 w-full" :disabled="!choice" :class="!choice && 'opacity-50 cursor-not-allowed'">Record decision</button>
-  <p class="caption mt-3 mb-0">A decision is final. Approve and reject become feedback examples for retraining; escalate does not.</p>
+  <p class="caption mt-3 mb-0">A decision is final. Confirming fraud and dismissing a flag become feedback examples for retraining; escalating does not.</p>
 </form>
 {% else %}
 <section class="card">

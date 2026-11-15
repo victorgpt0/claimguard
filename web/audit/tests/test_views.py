@@ -63,7 +63,7 @@ def test_overview_statistics(auditor, reports, pipeline_files):
     assert "Flagged claims" in page and "KES 60,000" in page and "1 with narrative" in page
     assert 'id="chart-status"' in page  # chart data via json_script
     # every chart category is named beside its count, not shown by colour alone
-    assert "Approved (flag confirmed)" in page and "Rejected (false positive)" in page and "Next in the queue" in page
+    assert "Fraud confirmed" in page and "Flag dismissed" in page and "Next in the queue" in page
 
 
 def test_overview_empty_state_says_what_to_do(auditor, admin, db):

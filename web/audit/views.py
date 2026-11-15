@@ -40,8 +40,8 @@ def _config_or_none(request):
 
 # KPI tones are whole class names so Tailwind finds them here. Each category keeps one colour (a design token) wherever it appears, and is always named
 # beside its count, so no chart relies on colour alone.
-STATUS_SEGMENTS = [("pending", "Pending", "sun"), ("approved", "Approved (flag confirmed)", "red"),
-                   ("rejected", "Rejected (false positive)", "green"), ("escalated", "Escalated", "violet")]
+STATUS_SEGMENTS = [("pending", "Pending", "sun"), ("approved", "Fraud confirmed", "red"),
+                   ("rejected", "Flag dismissed", "green"), ("escalated", "Escalated", "violet")]
 VERDICT_SEGMENTS = [("inconsistent", "Inconsistent", "red"), ("consistent", "Consistent", "sky"),
                     ("none", "No verdict", "faint")]
 

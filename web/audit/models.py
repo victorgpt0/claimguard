@@ -97,10 +97,10 @@ class ClassifierVerdict(models.Model):
 
 class AuditReport(models.Model):
     class Status(models.TextChoices):
-        PENDING = "pending"
-        APPROVED = "approved"
-        REJECTED = "rejected"
-        ESCALATED = "escalated"
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Fraud confirmed"
+        REJECTED = "rejected", "Flag dismissed"
+        ESCALATED = "escalated", "Escalated"
 
     class Lane(models.TextChoices):
         TEXT_INCONSISTENT = "text_inconsistent", "Text inconsistent"
