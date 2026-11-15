@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% load lucide %}
+{% block head_title %}Escalated reports{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Escalated reports <span class="badge">{{ escalated_count }} awaiting</span></h1>
+    <p>Reports an auditor sent to a senior reviewer. Confirm the fraud or dismiss the flag; either becomes a feedback example for retraining.</p>
+  </div>
+</div>
+
+<section class="card">
+{% if reports %}
+  <div class="table-wrap">
+  <table class="list">
+    <caption class="sr-only">Escalated reports awaiting a senior reviewer, oldest first</caption>
+    <thead><tr><th scope="col">Report</th><th scope="col">Lane</th><th scope="col">Claim</th><th scope="col">Provider</th><th scope="col">Code</th><th scope="col" class="num">Amount (KES)</th><th scope="col">Escalated by</th><th scope="col">Escalated at</th></tr></thead>
+    <tbody>{% for r in reports %}
+      <tr><td><a href="{% url 'audit:escalated_report' r.pk %}">#{{ r.pk }}</a></td>
+        <td>{% include "audit/lane_badge.html" with lane=r.lane %}</td>
+        <td>{{ r.claim.claim_ref }}</td><td>{{ r.claim.provider_id }}</td><td><code>{{ r.claim.icd11_code }}</code></td>
+        <td class="num">{{ r.claim.claim_amount|floatformat:"0g" }}</td>
+        <td>{{ r.reviewed_by.username|default:"—" }}</td><td>{{ r.reviewed_at|date:"Y-m-d H:i" }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  </div>
+  {% if escalated_count > 200 %}<p class="caption mt-3 mb-0">Showing the first 200 of {{ escalated_count }}.</p>{% endif %}
+{% else %}
+  <div class="empty-state">
+    <span class="kpi-icon size-12 bg-warn-soft text-warn">{% lucide "arrow-up-right" size=22 %}</span>
+    <h2>No escalated reports</h2>
+    <p>Nothing has been sent for a senior review.</p>
+  </div>
+{% endif %}
+</section>
+{% endblock %}

@@ -159,11 +159,8 @@ def queue(request):
                         "structural_anomaly": lane_counts.get("consistent", 0)}})
 
 
-@auditor_required
-def report_detail(request, pk: int):
-    """The six panels in pipeline order (NFR-07): the claim's inputs (1-3), then what each
-    stage concluded (4-6), on one page with the decision."""
-    report = get_object_or_404(AuditReport.objects.select_related("claim", "verdict", "reviewed_by"), pk=pk)
+def _report_context(request, report: AuditReport) -> dict:
+    """Panels 1-6 of the report page: the claim's inputs and what each stage concluded."""
     claim = report.claim
     stay = None
     if claim.discharge_date:
@@ -171,11 +168,29 @@ def report_detail(request, pk: int):
     definition = None
     if _config_or_none(request) is not None:
         definition = services.icd11_definition(claim.icd11_code)
-    return render(request, "audit/report.html", {
-        "report": report, "claim": claim, "stay": stay, "definition": definition, "amount": kes(claim.claim_amount),
+    return {
+        "report": report, "claim": claim, "stay": stay, "definition": definition,
+        "amount": kes(claim.claim_amount),
         "sources": [services.SOURCE_NAMES.get(s, s) for s in report.flag_sources or []],
         "shap_chart": charts.shap_contributions(report.shap_attribution) if report.shap_attribution else None,
-        "decisions": DECISIONS, "query": request.GET.urlencode()})
+    }
+
+
+@auditor_required
+def report_detail(request, pk: int):
+    """The six panels in pipeline order (NFR-07) and the auditor's decision form."""
+    report = get_object_or_404(AuditReport.objects.select_related("claim", "verdict", "reviewed_by"), pk=pk)
+    return render(request, "audit/report.html", {**_report_context(request, report),
+                                                 "decisions": DECISIONS, "query": request.GET.urlencode(),
+                                                 "escalation": False})
+
+
+def _apply_decision(request, report: AuditReport, decision: str) -> None:
+    """Persist the decision and log it (FR-09). The caller holds the row lock; the feedback
+    example is written afterwards, outside the transaction."""
+    report.status, report.reviewed_by, report.reviewed_at = decision, request.user, timezone.now()
+    report.save(update_fields=["status", "reviewed_by", "reviewed_at"])
+    ActivityLog.record(ActivityLog.Action.DECISION, request.user, f"report #{report.pk}: {decision}")
 
 
 @auditor_required
@@ -193,9 +208,7 @@ def decide(request, pk: int):
         if report.status != AuditReport.Status.PENDING:
             messages.warning(request, f"Report #{pk} was already {report.status}.")
             return redirect("audit:queue")
-        report.status, report.reviewed_by, report.reviewed_at = decision, request.user, timezone.now()
-        report.save(update_fields=["status", "reviewed_by", "reviewed_at"])
-        ActivityLog.record(ActivityLog.Action.DECISION, request.user, f"report #{pk}: {decision}")
+        _apply_decision(request, report, decision)
     if decision in (AuditReport.Status.APPROVED, AuditReport.Status.REJECTED):
         _write_feedback_example(request, report, decision)
     messages.success(request, f"Report #{pk}: {decision}.")
@@ -215,6 +228,50 @@ def _write_feedback_example(request, report: AuditReport, decision: str) -> None
             auditor_decision=decision, icd11_definition=services.code_reference(report.claim.icd11_code))
     except services.ConfigMissing:
         messages.warning(request, "The decision is saved, but no feedback example was written: config.yaml is missing.")
+
+
+# --- Escalation (Administrator, senior reviewer) ----------------------------------------------
+
+@administrator_required
+def escalated_queue(request):
+    """Reports an auditor sent up for a senior reviewer, oldest first."""
+    escalated = (AuditReport.objects.filter(status=AuditReport.Status.ESCALATED)
+                 .select_related("claim", "verdict", "reviewed_by")
+                 .order_by("reviewed_at", "id"))
+    return render(request, "audit/escalated.html", {"reports": escalated[:200], "escalated_count": escalated.count()})
+
+
+@administrator_required
+def escalated_report(request, pk: int):
+    """An escalated report with only the final two decisions (confirm fraud / dismiss flag)."""
+    report = get_object_or_404(AuditReport.objects.select_related("claim", "verdict", "reviewed_by"),
+                               pk=pk, status=AuditReport.Status.ESCALATED)
+    decisions = [AuditReport.Status.APPROVED, AuditReport.Status.REJECTED]
+    return render(request, "audit/report.html", {**_report_context(request, report),
+                                                 "decisions": decisions, "query": "",
+                                                 "escalation": True})
+
+
+@administrator_required
+def escalated_decide(request, pk: int):
+    """The senior reviewer's final call on an escalated report. Confirming or dismissing
+    writes the feedback example; the report then leaves the escalated queue."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    decision = request.POST.get("decision")
+    if decision not in (AuditReport.Status.APPROVED, AuditReport.Status.REJECTED):
+        messages.error(request, "An escalated report can only be confirmed as fraud or dismissed.")
+        return redirect("audit:escalated_report", pk=pk)
+    with transaction.atomic():
+        report = get_object_or_404(AuditReport.objects.select_for_update(of=("self",)).select_related("claim", "verdict"), pk=pk)
+        if report.status != AuditReport.Status.ESCALATED:
+            messages.warning(request, f"Report #{pk} is not escalated.")
+            return redirect("audit:escalated")
+        _apply_decision(request, report, decision)
+    if decision in (AuditReport.Status.APPROVED, AuditReport.Status.REJECTED):
+        _write_feedback_example(request, report, decision)
+    messages.success(request, f"Report #{pk}: {decision}.")
+    return redirect("audit:escalated")
 
 
 # --- Monitoring (Administrator) ----------------------------------------------------------------

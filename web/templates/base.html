@@ -47,6 +47,7 @@
       {% if user.is_administrator %}
       {# Separation of duties: the Administrator decides what is audited (feed, uploads, jobs); #}
       {# the Fraud Auditor judges the results and never sees the data pipeline or batches. #}
+      <a class="nav-link {% if url_name == 'escalated' or url_name == 'escalated_report' %}active{% endif %}" {% if url_name == 'escalated' or url_name == 'escalated_report' %}aria-current="page"{% endif %} href="{% url 'audit:escalated' %}">{% lucide "arrow-up-right" size=18 %} Escalated</a>
       <div class="nav-section">Data</div>
       <a class="nav-link {% if url_name == 'pipeline' %}active{% endif %}" {% if url_name == 'pipeline' %}aria-current="page"{% endif %} href="{% url 'ingestion:pipeline' %}">{% lucide "workflow" size=18 %} Data pipeline</a>
       <a class="nav-link {% if url_name == 'batches' or url_name == 'batch' or url_name == 'upload' %}active{% endif %}" {% if url_name == 'batches' or url_name == 'batch' or url_name == 'upload' %}aria-current="page"{% endif %} href="{% url 'audit:batches' %}">{% lucide "layers" size=18 %} Batches</a>

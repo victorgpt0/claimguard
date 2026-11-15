@@ -2,7 +2,7 @@
 {% load lucide %}
 {% block head_title %}Report #{{ report.pk }}{% endblock %}
 {% block content %}
-<a class="back-link" href="{% url 'audit:queue' %}?{{ query }}">{% lucide "arrow-left" size=15 %} Review queue</a>
+<a class="back-link" href="{% if escalation %}{% url 'audit:escalated' %}{% else %}{% url 'audit:queue' %}?{{ query }}{% endif %}">{% lucide "arrow-left" size=15 %} {% if escalation %}Escalated reports{% else %}Review queue{% endif %}</a>
 <div class="page-head">
   <div>
     <h1>Report #{{ report.pk }} · {{ claim.claim_ref }} {% include "audit/lane_badge.html" with lane=report.lane %}</h1>
@@ -59,8 +59,8 @@
 
 {# The decision stays in view while the panels scroll (on wide screens). #}
 <aside class="xl:sticky xl:top-20">
-{% if report.status == "pending" %}
-<form method="post" action="{% url 'audit:decide' report.pk %}" class="card" x-data="{ choice: '' }">
+{% if report.status == "pending" or escalation %}
+<form method="post" action="{% if escalation %}{% url 'audit:escalated_decide' report.pk %}{% else %}{% url 'audit:decide' report.pk %}{% endif %}" class="card" x-data="{ choice: '' }">
   {% csrf_token %}<h2>Decision</h2>
   <input type="hidden" name="lane" value="{{ request.GET.lane }}"><input type="hidden" name="order" value="{{ request.GET.order|default:'score' }}">
   <fieldset class="m-0 space-y-2 border-0 p-0">
