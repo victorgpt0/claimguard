@@ -32,6 +32,8 @@ def claims_set(n=N, bad_code_at=None):
         "patient_age": 30.0, "patient_sex": "female", "icd11_code": "JB22.1", "claim_amount": 30000.0,
         "service_date": dates.strftime("%Y-%m-%d"), "discharge_date": (dates + timedelta(days=3)).strftime("%Y-%m-%d"),
         "clinical_notes": "Emergency caesarean section for obstructed labour, mother and baby stable.",
+        "facility_type": "sub_county_hospital", "claim_type": "inpatient", "package": "surgical",
+        "payment_mechanism": "case_rate", "procedure": "Emergency caesarean section", "tariff": 30000.0,
         "is_fraud": 0, "label": "consistent",
     })
     if bad_code_at is not None:

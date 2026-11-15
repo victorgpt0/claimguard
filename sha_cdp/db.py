@@ -32,6 +32,15 @@ claims = Table(
     Column("service_date", Date, nullable=False),
     Column("discharge_date", Date),
     Column("clinical_notes", Text, nullable=False),
+    # Richer claim structure carried by the live-feed generator (src/data/generator.py): the kind
+    # of facility, the service and benefit package, how SHA pays for it, and the tariff. Nullable:
+    # claims seeded before these columns existed read back as NULL until the platform is re-seeded.
+    Column("facility_type", String(40)),
+    Column("claim_type", String(20)),
+    Column("package", String(40)),
+    Column("payment_mechanism", String(20)),
+    Column("procedure", String(120)),
+    Column("tariff", Float),
     Column("lodged_at", DateTime, nullable=False),
     Column("approved_at", DateTime, nullable=False),
     Column("paid_at", DateTime, nullable=False, index=True),
