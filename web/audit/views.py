@@ -17,7 +17,7 @@ from accounts.roles import administrator_required, any_role_required, auditor_re
 from activity.models import ActivityLog
 
 from . import charts, services
-from .models import AuditReport, ClassifierVerdict
+from .models import AuditReport, ClassifierVerdict, EnforcementAction, FraudCase
 
 DECISIONS = [AuditReport.Status.APPROVED, AuditReport.Status.REJECTED, AuditReport.Status.ESCALATED]
 LANES = {"text_inconsistent": ClassifierVerdict.Verdict.INCONSISTENT,
@@ -191,6 +191,11 @@ def _apply_decision(request, report: AuditReport, decision: str) -> None:
     report.status, report.reviewed_by, report.reviewed_at = decision, request.user, timezone.now()
     report.save(update_fields=["status", "reviewed_by", "reviewed_at"])
     ActivityLog.record(ActivityLog.Action.DECISION, request.user, f"report #{report.pk}: {decision}")
+    if decision == AuditReport.Status.APPROVED:
+        FraudCase.objects.get_or_create(
+            report=report,
+            defaults={"claim": report.claim, "provider_id": report.claim.provider_id,
+                      "recovery_amount": report.claim.claim_amount, "created_by": request.user})
 
 
 @auditor_required
@@ -272,6 +277,43 @@ def escalated_decide(request, pk: int):
         _write_feedback_example(request, report, decision)
     messages.success(request, f"Report #{pk}: {decision}.")
     return redirect("audit:escalated")
+
+
+# --- Fraud cases (Administrator) ---------------------------------------------------------------
+
+@administrator_required
+def fraud_case_list(request):
+    """Every confirmed fraud with its recommended recovery amount and recorded actions."""
+    cases = (FraudCase.objects.select_related("claim", "report")
+             .annotate(action_count=Count("actions")))
+    open_count = cases.filter(status=FraudCase.Status.OPEN).count()
+    return render(request, "audit/fraud_cases.html", {"cases": cases, "open_count": open_count})
+
+
+@administrator_required
+def fraud_case_detail(request, pk: int):
+    case = get_object_or_404(FraudCase.objects.select_related("claim", "report", "created_by")
+                             .prefetch_related("actions__recorded_by"), pk=pk)
+    return render(request, "audit/fraud_case.html", {
+        "case": case, "amount": kes(case.recovery_amount),
+        "action_choices": EnforcementAction.Action.choices,
+        "recorded": case.actions.all()})
+
+
+@administrator_required
+def record_enforcement_action(request, pk: int):
+    """Record one recommended enforcement action on a fraud case."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    case = get_object_or_404(FraudCase, pk=pk)
+    action = request.POST.get("action")
+    if action not in EnforcementAction.Action.values:
+        messages.error(request, "Unknown enforcement action.")
+        return redirect("audit:fraud_case", pk=pk)
+    EnforcementAction.objects.create(case=case, action=action, note=request.POST.get("note", "").strip(),
+                                     recorded_by=request.user)
+    messages.success(request, "Enforcement action recorded.")
+    return redirect("audit:fraud_case", pk=pk)
 
 
 # --- Monitoring (Administrator) ----------------------------------------------------------------

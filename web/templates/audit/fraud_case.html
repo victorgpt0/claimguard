@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% load lucide %}
+{% block head_title %}Fraud case #{{ case.pk }}{% endblock %}
+{% block content %}
+<a class="back-link" href="{% url 'audit:fraud_cases' %}">{% lucide "arrow-left" size=15 %} Fraud cases</a>
+<div class="page-head">
+  <div>
+    <h1>Fraud case #{{ case.pk }} · {{ case.claim.claim_ref }} <span class="badge">{{ case.get_status_display }}</span></h1>
+    <p>Opened when report #{{ case.report_id }} confirmed the fraud flag. Record the enforcement SHA's law and practice provide.</p>
+  </div>
+</div>
+
+<div class="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+<div class="min-w-0">
+  <section class="card">
+    <h2>Claim</h2>
+    <dl class="fields">
+      <div><dt>Report</dt><dd>#{{ case.report_id }}</dd></div>
+      <div><dt>Claim</dt><dd>{{ case.claim.claim_ref }}</dd></div>
+      <div><dt>Provider</dt><dd>{{ case.provider_id }}</dd></div>
+      <div><dt>Billed ICD-11 code</dt><dd><code>{{ case.claim.icd11_code }}</code></dd></div>
+      <div><dt>Amount claimed</dt><dd>KES {{ case.claim.claim_amount|floatformat:"0g" }}</dd></div>
+      <div><dt>Recovery (s 49)</dt><dd>{{ amount }}</dd></div>
+      <div><dt>Opened by</dt><dd>{{ case.created_by.username|default:"—" }} on {{ case.created_at|date:"Y-m-d H:i" }}</dd></div>
+    </dl>
+  </section>
+
+  <section class="card mt-5">
+    <h2>Statutory basis</h2>
+    <p class="caption">Social Health Insurance Act, No. 16 of 2023. Recording an action here is an internal recommendation, not real enforcement.</p>
+    <ul class="m-0 list-disc space-y-1.5 pl-5 text-sm text-muted">
+      <li><strong>s 48(5)</strong> — a provider that knowingly alters or falsifies information to defraud the Authority is liable to a fine (at most KES 2 million), suspension, or removal from the register of empanelled and contracted providers.</li>
+      <li><strong>s 48(6)–(8)</strong> — suspensions and removals are gazetted; the facility receives no benefit from the Fund while suspended.</li>
+      <li><strong>s 49</strong> — unlawfully obtained sums are recoverable, and recovered money goes back into the Fund.</li>
+      <li><strong>Practice</strong> — SHA has surcharged facilities to recover paid funds, withdrawn clinicians' platform access, referred cases to the DCI for prosecution, and asked the KMPDC / Clinical Officers Council to open disciplinary proceedings.</li>
+    </ul>
+  </section>
+</div>
+
+<aside class="xl:sticky xl:top-20">
+  <section class="card">
+    <h2>Record an action</h2>
+    <form method="post" action="{% url 'audit:fraud_action' case.pk %}">{% csrf_token %}
+      <p><label for="action">Action</label><select name="action" id="action" required>
+        {% for value, label in action_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select></p>
+      <p><label for="note">Note (optional)</label><textarea name="note" id="note" rows="3"></textarea></p>
+      <button type="submit" class="btn-primary mt-4 w-full">Record action</button>
+    </form>
+  </section>
+</aside>
+</div>
+
+<section class="card mt-5">
+  <h2>Recorded actions</h2>
+  {% if recorded %}
+  <div class="table-wrap">
+  <table class="list">
+    <caption class="sr-only">Enforcement actions recorded on this case, oldest first</caption>
+    <thead><tr><th scope="col">Action</th><th scope="col">Note</th><th scope="col">By</th><th scope="col">At</th></tr></thead>
+    <tbody>{% for a in recorded %}
+      <tr><td>{{ a.get_action_display }}</td><td>{{ a.note|default:"—" }}</td><td>{{ a.recorded_by.username|default:"—" }}</td><td>{{ a.recorded_at|date:"Y-m-d H:i" }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="caption">No actions recorded yet.</p>
+  {% endif %}
+</section>
+{% endblock %}
