@@ -107,3 +107,30 @@ the activity-log screen are cut before anything in the evaluation.
   tests and the `streamlit` dependency group removed. `src/db/schema.sql` and the SQLite
   repository stay: the evaluation runs still write to SQLite. Still open: the GPU worker's
   first run, hosting (#32, #39), the supervisor's agreement.
+
+## Post-decision workflow (15 Nov)
+
+An auditor's decision is no longer the end of the line. Escalated reports go to an
+Administrator (the senior reviewer), and a confirmed fraud opens a fraud case that records
+the enforcement SHA's law and practice provide.
+
+- **Escalate** (`audit:escalated*`, Administrator-only): an auditor sends a report up; the
+  Administrator makes the final **Confirm fraud / Dismiss flag** call, which writes the
+  feedback example. Escalating itself still writes none.
+- **Fraud case** (`audit:fraud_cases`, `audit:fraud_case`, `audit:fraud_action`,
+  Administrator-only): confirming fraud opens one `FraudCase` per report, holding the
+  recommended recovery amount (the claim amount, s 49) and the enforcement actions recorded
+  against it. It is an *internal audit record* of recommendations, not real enforcement.
+
+The statutory basis (Social Health Insurance Act, No. 16 of 2023, verified from the Act):
+
+| Measure | Source |
+|---|---|
+| A provider that knowingly alters or falsifies information to defraud the Authority is liable to a fine (≤ KES 2M), suspension, or removal from the register of empanelled/contracted providers | s 48(5) |
+| Suspensions and removals are gazetted; the facility receives no benefit from the Fund while suspended | s 48(6)–(8) |
+| Unlawfully obtained sums are recoverable; recovered money goes back into the Fund | s 49 |
+| Individuals making false statements for benefits: fines and/or imprisonment | s 48(1)(c), (3) |
+
+SHA practice (Ministry of Health notice, Aug 2025): surcharge facilities to recover paid
+funds, withdraw named clinicians' platform access, refer cases to the DCI for prosecution,
+and ask the KMPDC / Clinical Officers Council to open disciplinary proceedings.

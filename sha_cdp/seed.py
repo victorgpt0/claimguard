@@ -23,7 +23,9 @@ from sqlalchemy import delete, func, insert, select
 from . import db
 
 KEEP = ["claim_id", "provider_id", "facility_level", "member_id", "beneficiary_type", "patient_age", "patient_sex",
-        "icd11_code", "claim_amount", "service_date", "discharge_date", "clinical_notes"]
+        "icd11_code", "claim_amount", "service_date", "discharge_date", "clinical_notes",
+        # richer claim structure the generator already emits (nullable columns in the platform DB)
+        "facility_type", "claim_type", "package", "payment_mechanism", "procedure", "tariff"]
 LODGE_DAYS = (0, 7)        # reg. 58(1)
 APPROVE_DAYS = (1, 14)     # reg. 59 review
 PAY_DAYS = (14, 60)        # within the 90-day limit

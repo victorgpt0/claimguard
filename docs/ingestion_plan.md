@@ -52,7 +52,12 @@ ids. Every claim is unseen input. See `docs/data_generation.md`, "Live claims fe
 (`SHA_CDP_DATABASE_URL`: a second Neon database, or a local SQLite file). Nothing in `src/` or
 `web/` imports it. The seeder assigns SHA's processing times: lodged 0–7 days after discharge,
 approved 1–14 days later, paid 14–60 days after approval (inside the 90-day limit). It keeps
-only the platform's columns, so the ground truth never enters it. A simulation clock (start,
+only the platform's columns, so the ground truth never enters it. A claim is one flat row —
+member and patient details, a single ICD-11 code, the amount, the clinical note, and the richer
+structure the generator already emits (`facility_type`, `claim_type`, `package`,
+`payment_mechanism`, `procedure`, `tariff`) — plus the three processing times, which are its
+status. There are no line items and no provider or patient tables: the provider is an id and the
+facility level is a number. A simulation clock (start,
 advance, play, pause) decides which claims have been paid "so far". Only paid claims are
 exported, because a post-payment audit sees a claim once SHA has paid it. Paging uses the
 cursor (paid_at, seq).
@@ -95,6 +100,7 @@ pause scheduled pulls and move the platform's clock; every move is followed by a
 
 ```bash
 # 1. once: generate live-v1 on Colab (notebook 06), then load it into the platform
+#    (re-seed an existing platform after a schema change: add --replace)
 .venv/bin/python -m sha_cdp.seed ~/gdrive/claimguard/data/processed/live-v1/live.parquet
 # 2. the platform, the web app, and two workers (ingest with beat; cpu for batches)
 .venv/bin/uvicorn sha_cdp.app:app --port 8100

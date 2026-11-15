@@ -24,6 +24,8 @@ def claims_set(n=60):
         "icd11_code": "JB20.0", "claim_amount": 10000.0, "service_date": dates.strftime("%Y-%m-%d"),
         "discharge_date": [d.strftime("%Y-%m-%d") for d in dates[:-1] + timedelta(days=1)] + [None],
         "clinical_notes": "Spontaneous vaginal delivery of a live infant, mother stable, discharged home.",
+        "claim_type": "inpatient", "package": "medical_inpatient",
+        "payment_mechanism": "case_rate", "procedure": "Spontaneous vaginal delivery", "tariff": 8000.0,
         "is_fraud": 0, "fraud_typology": "none", "label": "consistent", "is_upcoded": False,
         "original_icd11_code": "JB20.0", "has_text_noise": False,
     })
@@ -73,6 +75,8 @@ def test_clock_starts_before_the_first_payment_and_releases_claims(platform):
     as_of = pd.Timestamp(body["as_of"])
     assert body["claims"] and all(pd.Timestamp(c["paid_at"]) <= as_of for c in body["claims"])
     assert "is_fraud" not in body["claims"][0] and "label" not in body["claims"][0]
+    # the richer claim structure reaches the consumer; the ground truth never does
+    assert {"facility_type", "claim_type", "package", "payment_mechanism", "procedure", "tariff"} <= set(body["claims"][0])
 
 
 def test_cursor_pages_without_repeats_or_gaps(platform):

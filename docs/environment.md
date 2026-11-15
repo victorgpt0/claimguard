@@ -52,22 +52,29 @@ Oracle Cloud Always Free VM runs the whole platform; Colab runs GPU jobs on dema
 
 | Item | Configured value | Evidence |
 |---|---|---|
-| Host | Oracle Cloud Always Free, `VM.Standard.A1.Flex` (Ampere ARM), 2 OCPU, 12 GB, 100 GB boot volume, region UK South (`uk-london-1`), reserved public IP | `deploy/README.md` step 1 |
-| OS and runtime | Ubuntu 24.04 (aarch64), Docker with Compose; 4 GB swap; keys-only SSH with fail2ban | `deploy/scripts/01-bootstrap-vm.sh` |
-| Services (`deploy/compose.yaml`) | Caddy 2.10 (TLS, Cloudflare addresses only) · web (Django, gunicorn) · PostgreSQL 18 · Redis 7.4 (append-only) · sha-cdp (simulated claims platform, internal only) · worker-ingest (claims feed and beat) · worker-cpu (stage 1, SHAP, classifier) | compose file, memory limits per service |
+| Host | Oracle Cloud VM, region UK South (`uk-london-1`), reserved public IP. **Measured:** x86_64, 2 cores of an AMD EPYC 9J14, 11 GiB memory (9 GiB available), 4 GiB swap, 48 GB disk (32 GB free). Shape `VM.Standard.E5.Flex` (AMD), not the Always Free Ampere A1 the runbook first described; paid for by the account's credit until May 2027 | `08-ops-check.sh timing`, 10 Nov (TC-054) |
+| OS and runtime | **Measured:** Ubuntu 24.04.5 LTS, kernel 7.0.0-1013-oracle; Docker 29.9.3, Compose v5.7.0; keys-only SSH with fail2ban | TC-054; `deploy/scripts/01-bootstrap-vm.sh` |
+| Services (`deploy/compose.yaml`) | **Measured:** Caddy 2.10 (TLS, Cloudflare addresses only) · web (Python 3.13.18, Django 5.2.18, gunicorn; image 1.2 GB) · PostgreSQL 18.6 · Redis 7.4.12 (append-only) · sha-cdp (simulated claims platform, internal only) · worker-ingest (claims feed and beat) · worker-cpu (stage 1, SHAP, classifier) | compose file, memory limits per service |
 | Edge | Cloudflare (proxied DNS, Full (strict) TLS with a Cloudflare Origin Certificate, Always Use HTTPS, TLS ≥ 1.2) | `deploy/README.md` step 5 |
 | GPU jobs | `notebooks/05_gpu_worker.ipynb` on Colab (T4), reaching PostgreSQL :5432 and Redis :6380 over TLS with the deployment's own CA | `deploy/README.md` step 8 |
 | Model and data | Classifier, datasets and ICD-11 cache read from Google Drive, mounted at `/srv/gdrive` by rclone; the frozen classifier is also published on the Hugging Face Hub (`victorgpt0/claimguard-consistency-classifier`, tag `v1.0-evaluated`, TC-052) | `deploy/scripts/02-drive-mount.sh` |
 | Releases | `main` is deployed: a merged pull request runs the tests, then deploys over SSH with a forced-command key | `.github/workflows/deploy.yml`, `deploy/scripts/deploy.sh` |
 | Backups | Both databases nightly at 02:30 (Nairobi), 14 days on the VM and 30 on Drive | `deploy/scripts/06-backups.sh` |
 
-**Measured on the deployed release:** OS, CPU, memory, disk and image versions, response
-times, failure rates, restarts and dependency failures are recorded by
-`deploy/scripts/08-ops-check.sh` (TC-053, TC-054). *(Values to be filled in from its report.)*
+**Measured on the deployed release (10 Nov, commit `49046c6`; TC-053, TC-054; reports in
+`tests/evidence/ops-2026-11-10/`):** pages answered in 0.07–0.15 s median (240 of 240
+requests 200, through Cloudflare); 1 server error in 2,238 page requests over the first 21
+hours (0.04%); 9 of 9 CPU jobs succeeded at 0.77 s per claim on average (NFR-01: ≤ 5 s);
+claims-feed pulls 1,977 of 1,979 succeeded. Restarting the web container left the site
+unavailable for 1.2 s, the whole stack for 9.8 s; after a reboot every service, the Drive
+mount and the workers came back by themselves. With the CPU worker, Redis, the claims
+platform or PostgreSQL stopped, the site kept answering (or showed its own error page, for
+PostgreSQL) and recovered without intervention.
 
-Constraints to state in Chapter 5: the Always Free shape limit (2 OCPU / 12 GB in total),
-Oracle's idle-reclamation rule for Always Free VMs (CPU, network and memory under 20% for 7
-days), and that GPU work depends on a Colab session being open. The synthetic data and the
+Constraints to state in Chapter 5: GPU work depends on a Colab session being open, and the
+host's lifetime: the E5.Flex VM is not Always Free; the account's credit covers it until May
+2027, after which it must be paid for or the platform moved to an Always Free Ampere A1 VM
+(2 OCPU / 12 GB in total, subject to Oracle's idle-reclamation rule) by the same runbook. The synthetic data and the
 absence of real users limit what the operational figures say about production load.
 
 **Local machine:** reads Drive directly. The `rclone-gdrive` systemd user service mounts

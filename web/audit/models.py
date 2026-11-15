@@ -97,10 +97,10 @@ class ClassifierVerdict(models.Model):
 
 class AuditReport(models.Model):
     class Status(models.TextChoices):
-        PENDING = "pending"
-        APPROVED = "approved"
-        REJECTED = "rejected"
-        ESCALATED = "escalated"
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Fraud confirmed"
+        REJECTED = "rejected", "Flag dismissed"
+        ESCALATED = "escalated", "Escalated"
 
     class Lane(models.TextChoices):
         TEXT_INCONSISTENT = "text_inconsistent", "Text inconsistent"
@@ -178,3 +178,54 @@ class Job(models.Model):
     @property
     def percent(self) -> int:
         return round(100 * self.done / self.total) if self.total else 0
+
+
+class FraudCase(models.Model):
+    """What to do about a claim once its fraud flag is confirmed (approved). An internal audit
+    record of recommended enforcement, grounded in the Social Health Insurance Act, 2023:
+    s 48(5)-(8) sanctions and s 49 recovery. It records recommendations, not real enforcement."""
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        CLOSED = "closed", "Closed"
+
+    report = models.OneToOneField(AuditReport, on_delete=models.PROTECT, related_name="fraud_case")
+    claim = models.ForeignKey(Claim, on_delete=models.PROTECT, related_name="fraud_cases")
+    provider_id = models.CharField(max_length=64, db_index=True)
+    recovery_amount = models.DecimalField(max_digits=14, decimal_places=2)   # s 49: the amount to recover
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT,
+                                   related_name="fraud_cases")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Fraud case #{self.pk} ({self.report})"
+
+
+class EnforcementAction(models.Model):
+    """One recorded enforcement action on a fraud case. The choices are the measures SHA's law
+    and practice provide (s 48(5)-(8), s 49); recording one is an internal recommendation."""
+
+    class Action(models.TextChoices):
+        RECOVER = "recover", "Recover / surcharge funds (s 49)"
+        SUSPEND = "suspend", "Suspend provider (s 48(5)(b))"
+        DEREGISTER = "deregister", "Remove from empanelled register (s 48(5)(c))"
+        REFER_DCI = "refer_dci", "Refer to DCI for prosecution"
+        REFER_REGULATOR = "refer_regulator", "Refer to KMPDC / Clinical Officers Council"
+        WITHDRAW_ACCESS = "withdraw_access", "Withdraw clinician platform access"
+
+    case = models.ForeignKey(FraudCase, on_delete=models.PROTECT, related_name="actions")
+    action = models.CharField(max_length=30, choices=Action.choices)
+    note = models.TextField(blank=True)
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT,
+                                    related_name="enforcement_actions")
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["recorded_at"]
+
+    def __str__(self):
+        return f"{self.get_action_display()} on case #{self.case.pk}"

@@ -9,7 +9,7 @@ from django.test import Client
 from django.urls import reverse
 
 from activity.models import ActivityLog
-from audit.models import AuditReport, Batch, Claim, ClassifierVerdict
+from audit.models import AuditReport, Batch, Claim, ClassifierVerdict, EnforcementAction, FraudCase
 
 
 def test_signed_out_visitors_are_sent_to_sign_in(db):
@@ -43,10 +43,14 @@ def test_auditors_reach_no_batch_or_pipeline_url(auditor, admin, reports, pipeli
     batch_id = reports[0].claim.batch_id
     job = Job.objects.create(batch_id=batch_id, queue="cpu")
     args = {"batch": [batch_id], "start_job": [batch_id], "batch_summary": [batch_id], "batch_reports": [batch_id],
-            "job_progress": [job.pk], "close": [batch_id]}
+            "job_progress": [job.pk], "close": [batch_id],
+            "escalated_report": [reports[0].pk], "escalated_decide": [reports[0].pk],
+            "fraud_case": [1], "fraud_action": [1]}
     names = ["audit:batches", "audit:upload", "audit:upload_template", "audit:batch", "audit:start_job",
              "audit:batch_summary", "audit:batch_reports", "audit:job_progress", "ingestion:pipeline",
-             "ingestion:live", "ingestion:sync", "ingestion:close", "ingestion:toggle", "ingestion:clock"]
+             "ingestion:live", "ingestion:sync", "ingestion:close", "ingestion:toggle", "ingestion:clock",
+             "audit:escalated", "audit:escalated_report", "audit:escalated_decide",
+             "audit:fraud_cases", "audit:fraud_case", "audit:fraud_action"]
     # every route in the two modules is listed, so a new page cannot be added without a role decision
     routed = {f"{ns}:{p.name}" for ns in ("audit", "ingestion")
               for p in get_resolver().namespace_dict[ns][1].url_patterns}
@@ -63,7 +67,7 @@ def test_overview_statistics(auditor, reports, pipeline_files):
     assert "Flagged claims" in page and "KES 60,000" in page and "1 with narrative" in page
     assert 'id="chart-status"' in page  # chart data via json_script
     # every chart category is named beside its count, not shown by colour alone
-    assert "Approved (flag confirmed)" in page and "Rejected (false positive)" in page and "Next in the queue" in page
+    assert "Fraud confirmed" in page and "Flag dismissed" in page and "Next in the queue" in page
 
 
 def test_overview_empty_state_says_what_to_do(auditor, admin, db):
@@ -226,3 +230,77 @@ def test_model_page_shows_the_held_out_test_results(admin, pipeline_files):
     assert "8.1e-12" in page and "Structured-only model (2 seeds, mean ± std)" in page and "5.0e-10" in page
     assert page.index("Held-out test set") < page.index("Validation split · used to choose the checkpoint")
     assert "lower bound on the classifier alone" in page
+
+
+def test_escalation_queue_shows_only_escalated_reports(admin, auditor, reports, pipeline_files):
+    auditor.post(reverse("audit:decide", args=[reports[0].pk]), {"decision": "escalated"})
+    page = admin.get(reverse("audit:escalated")).content.decode()
+    assert f"#{reports[0].pk}" in page and reports[0].claim.claim_ref in page
+    assert reports[1].claim.claim_ref not in page           # the still-pending report is not here
+    queue = auditor.get(reverse("audit:queue")).content.decode()
+    assert reports[0].claim.claim_ref not in queue and reports[1].claim.claim_ref in queue
+
+
+def test_admin_confirms_escalated_report_and_writes_feedback(admin, auditor, reports, pipeline_files):
+    auditor.post(reverse("audit:decide", args=[reports[0].pk]), {"decision": "escalated"})
+    response = admin.post(reverse("audit:escalated_decide", args=[reports[0].pk]), {"decision": "approved"})
+    report = AuditReport.objects.get(pk=reports[0].pk)
+    assert (report.status, report.reviewed_by.username) == ("approved", "admin")
+    assert response.status_code == 302 and reverse("audit:escalated") in response["Location"]
+    example = json.loads((pipeline_files / "artifacts" / "feedback_dataset" / "examples.jsonl").read_text())
+    assert example["label"] == "inconsistent"
+
+
+def test_admin_dismisses_escalated_report_and_writes_consistent_example(admin, auditor, reports, pipeline_files):
+    auditor.post(reverse("audit:decide", args=[reports[1].pk]), {"decision": "escalated"})
+    admin.post(reverse("audit:escalated_decide", args=[reports[1].pk]), {"decision": "rejected"})
+    report = AuditReport.objects.get(pk=reports[1].pk)
+    assert (report.status, report.reviewed_by.username) == ("rejected", "admin")
+    example = json.loads((pipeline_files / "artifacts" / "feedback_dataset" / "examples.jsonl").read_text())
+    assert example["label"] == "consistent"
+
+
+def test_non_escalated_report_cannot_be_decided_by_the_escalation_flow(admin, reports, pipeline_files):
+    admin.post(reverse("audit:escalated_decide", args=[reports[0].pk]), {"decision": "approved"})
+    assert AuditReport.objects.get(pk=reports[0].pk).status == "pending"
+    assert not (pipeline_files / "artifacts" / "feedback_dataset" / "examples.jsonl").exists()
+
+
+def test_escalated_report_offers_only_the_final_two_decisions(admin, auditor, reports, pipeline_files):
+    auditor.post(reverse("audit:decide", args=[reports[0].pk]), {"decision": "escalated"})
+    page = admin.get(reverse("audit:escalated_report", args=[reports[0].pk])).content.decode()
+    assert page.count('type="radio" name="decision"') == 2
+    assert 'value="escalated"' not in page
+    assert "Confirm fraud" in page and "Dismiss flag" in page
+    assert reverse("audit:escalated_decide", args=[reports[0].pk]) in page
+
+
+def test_confirming_fraud_opens_a_fraud_case(auditor, reports, pipeline_files):
+    auditor.post(reverse("audit:decide", args=[reports[0].pk]), {"decision": "approved", "lane": ""})
+    case = FraudCase.objects.get(report=reports[0])
+    assert case.claim == reports[0].claim and case.provider_id == reports[0].claim.provider_id
+    assert case.recovery_amount == reports[0].claim.claim_amount   # s 49: recover what was paid
+    assert case.created_by.username == "auditor"
+
+
+def test_dismissing_the_flag_opens_no_fraud_case(auditor, reports, pipeline_files):
+    auditor.post(reverse("audit:decide", args=[reports[1].pk]), {"decision": "rejected", "lane": ""})
+    assert not FraudCase.objects.exists()
+
+
+def test_confirming_after_escalation_opens_a_fraud_case(admin, auditor, reports, pipeline_files):
+    auditor.post(reverse("audit:decide", args=[reports[0].pk]), {"decision": "escalated"})
+    admin.post(reverse("audit:escalated_decide", args=[reports[0].pk]), {"decision": "approved"})
+    case = FraudCase.objects.get(report=reports[0])
+    assert case.created_by.username == "admin"
+    assert case.recovery_amount == reports[0].claim.claim_amount
+
+
+def test_recording_an_enforcement_action(admin, auditor, reports, pipeline_files):
+    auditor.post(reverse("audit:decide", args=[reports[0].pk]), {"decision": "approved", "lane": ""})
+    case = FraudCase.objects.get(report=reports[0])
+    admin.post(reverse("audit:fraud_action", args=[case.pk]), {"action": "recover", "note": "Surcharge the provider."})
+    action = EnforcementAction.objects.get(case=case)
+    assert (action.action, action.note, action.recorded_by.username) == ("recover", "Surcharge the provider.", "admin")
+    page = admin.get(reverse("audit:fraud_cases")).content.decode()
+    assert f"#{case.pk}" in page and reports[0].claim.claim_ref in page

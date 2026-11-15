@@ -28,7 +28,7 @@ Amount claimed: {{ amount_claimed }}. Amount under audit (queued claims): {{ amo
 
 ## Review progress
 
-| Pending | Approved | Rejected | Escalated |
+| Pending | Fraud confirmed | Flag dismissed | Escalated |
 |---:|---:|---:|---:|
 | {{ s.review.pending }} | {{ s.review.approved }} | {{ s.review.rejected }} | {{ s.review.escalated }} |
 {% if s.reviewers %}
