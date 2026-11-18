@@ -75,9 +75,11 @@
   ::selection { background: var(--accent-soft); }
   :focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
 
-  /* Form controls (the forms plugin resets them; these give the app's look). */
+  /* Form controls (the forms plugin resets them; these give the app's look). The plugin's
+     plain `select` and `textarea` rules come later in the output with the same weight, so
+     :not([hidden]) adds an attribute's weight; without it both stay white in the dark theme. */
   input[type=text], input[type=password], input[type=email], input[type=number], input[type=search],
-  input[type=date], input[type=file], select, textarea {
+  input[type=date], input[type=file], select:not([hidden]), textarea:not([hidden]) {
     @apply rounded-xl border-control bg-surface text-ink text-sm shadow-none focus:border-accent-ink focus:ring-2 focus:ring-accent-ink;
   }
   input[type=file] { @apply border p-2 file:mr-3 file:rounded-lg file:border-0 file:bg-hover file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink; }
@@ -162,7 +164,9 @@
   .filters label { @apply flex flex-col gap-1 text-xs font-medium text-muted; }
   form p { @apply mb-3; }
   form p label { @apply mb-1 block text-sm font-medium; }
-  form p input:not([type=checkbox]):not([type=radio]) { @apply w-full; }
+  /* select and textarea too: a select otherwise takes its longest option's width and runs
+     past a narrow card (the fraud case's enforcement actions). */
+  form p input:not([type=checkbox]):not([type=radio]), form p select, form p textarea { @apply w-full; }
   label.choice { @apply my-2 flex items-center gap-2.5 text-sm; }
 
   /* Report page pieces. */
