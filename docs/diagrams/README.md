@@ -1,5 +1,11 @@
 # Design diagrams for the Django platform (#60)
 
+> **Superseded (25 Nov 2026).** These are the 26 Oct versions. The figures in the final
+> document were redrawn from 16 Nov and are maintained with the documentation, outside this
+> repository; among other changes, the architecture now shows the Oracle Cloud VM in place of
+> Neon and Upstash, and the escalation sequence and fraud cases are added. Keep these files
+> as the record of the 26 Oct design.
+
 PlantUML sources and rendered PNGs for the Chapter 4 figures that the Django platform
 changed or added (26 Oct 2026). The paste instructions and the text around each figure are
 in `compare/changes.txt`, section D, outside this repository.

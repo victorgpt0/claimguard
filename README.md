@@ -3,10 +3,25 @@
 LLM-Assisted Anomaly Detection for Post-Payment Fraud Audit: A Case Study of Kenya's
 Social Health Authority
 
-Full research documentation (Chapters 1–4, methodology, system design) lives in the
-project's separate documentation repository, not here — this repo is the implementation
-only. See that repo's `SHA_Fraud_Audit_Project_Documentation.docx` for the complete
-design rationale this code follows.
+This repo is the implementation only; the written project documentation (methodology,
+system design, results) is kept outside it.
+
+- **Live system:** https://claimsguard.tech (Oracle Cloud VM, `deploy/README.md`)
+- **Project page:** https://victorgpt0.github.io/claimguard/ (`site/`, published by
+  `.github/workflows/pages.yml`)
+- **Frozen classifier:** Hugging Face Hub `victorgpt0/claimguard-consistency-classifier`,
+  revision tag `v1.0-evaluated` (the synthetic dataset is not published)
+
+## Status (25 Nov 2026)
+
+Implemented and evaluated: the three-stage pipeline, the v0.6-20k dataset, the classifier
+(five seeds, F1 0.975 ± 0.004 on validation), the baselines, the held-out test evaluation
+(read once, 27 Oct), the feedback retraining run, the narrative and SHAP checks, the Django
+platform with the simulated SHA claims feed, escalation and fraud cases, and the deployment
+with its operational checks. Every result is recorded in `tests/test_plan.md` (TC-001 to
+TC-056). Still open: one uploaded batch processed by the Colab GPU worker against the
+deployed release (TC-040), a usability test with a representative user (TC-015), and the
+`v1.0` tag (#44). The checklist is `docs/sprint_plan.md`.
 
 ## Problem
 
@@ -37,14 +52,22 @@ src/
 ├── narrative/            # AuditNarrativeGenerator (LLM, explanation-only)
 ├── reporting/            # AuditReportGenerator, AuditReportRepository
 ├── feedback/              # FeedbackRepository (FR-12), ClassifierRetrainer (FR-13/FR-14)
+├── baselines/             # rule-based, structured-only and zero-shot LLM baselines
+├── evaluation/            # held-out comparison, cost, faithfulness, rubric, SHAP coherence
+├── release/               # publishing the frozen classifier to the Hugging Face Hub
 └── db/                    # SQLite schema the pipeline writes reports to (imported into Django)
-web/                         # Django application (IR-03, IR-04, IR-07, IR-08)
+web/                         # Django application (IR-03, IR-04, IR-07, IR-08, IR-09)
 ├── claimguard_web/          # settings (env-driven), URLs, Celery app
 ├── accounts/                # User with role, allauth adapters (Google, no sign-up), admin site
 ├── activity/                # ActivityLog (FR-18)
-└── audit/                   # Batch, Claim, ClassifierVerdict, AuditReport, Job; pages; upload
-                             # validation (FR-15); process_batch task; batch summary (FR-16)
-notebooks/05_gpu_worker.ipynb  # Colab GPU worker for the "gpu" queue
+├── audit/                   # Batch, Claim, ClassifierVerdict, AuditReport, Job, FraudCase; pages;
+│                            # upload validation (FR-15); process_batch task; batch summary (FR-16);
+│                            # review, escalation and fraud cases
+└── ingestion/               # scheduled pull of paid claims from sha_cdp, Data pipeline page
+sha_cdp/                     # simulated SHA claims platform: own service, database and API
+notebooks/                   # Colab notebooks: dataset, training, baselines, GPU worker, live feed
+deploy/                      # Oracle Cloud deployment: compose file, scripts, runbook
+site/                        # project page (GitHub Pages)
 docker-compose.yml           # PostgreSQL, Redis, the web service, WHO ICD-11 API
 docs/diagrams/               # Chapter 4 diagrams for the Django platform (PlantUML + PNG)
 ```
@@ -106,10 +129,12 @@ cd web
 |---|---|---|
 | Quick local run | unset (SQLite) | `redis://localhost:6379/0` (`docker compose up -d redis`) |
 | Local PostgreSQL | `postgres://claimguard:claimguard-dev@localhost:5432/claimguard` (`docker compose up -d db redis`) | as above |
-| Hosted, needed for the Colab GPU worker | Neon: `neon deploy` writes `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` into `.env` | Upstash: `rediss://default:<password>@<db>.upstash.io:6379` |
+| Deployed (claimsguard.tech) | PostgreSQL on the Oracle VM, set up by `deploy/` | Redis on the Oracle VM; the Colab GPU worker reaches both over TLS |
+| Hosted, earlier setup (before 9 Nov) | Neon: `neon deploy` writes `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` into `.env` | Upstash: `rediss://default:<password>@<db>.upstash.io:6379` |
 
-The settings verify Upstash's TLS certificate and turn off server-side cursors on Neon's
-pooled endpoint. Run migrations and the one-off import on Neon's direct endpoint:
+The settings still support Neon and Upstash: they verify Upstash's TLS certificate and turn
+off server-side cursors on Neon's pooled endpoint. On Neon, run migrations and the one-off
+import on the direct endpoint:
 
 ```bash
 cd web
@@ -127,12 +152,19 @@ docker-compose.yml), so uploads, ICD-11 definitions and the monitoring pages nee
 `.venv` setup, which reads Drive directly.
 
 **Roles** (a separation of duties: whoever decides what is audited does not judge the
-results). The Fraud Auditor sees Overview and Review queue (report and decision). The
-Administrator sees Overview, Data pipeline, Batches (upload, processing, summaries), Model
-performance, Feedback loop, and Users and Activity log in Django's admin site, where accounts are
+results). The Fraud Auditor sees Overview and Review queue, where each report is decided as
+Confirm fraud, Dismiss flag or Escalate. The Administrator sees Overview, Data pipeline,
+Batches (upload, processing, summaries), the Escalated queue (the senior reviewer decides
+escalated reports), Fraud cases, Model performance, Feedback loop, and Users and Activity
+log in Django's admin site, where accounts are
 created, deactivated (never deleted), given a role and linked to a Google email, and the
 log is filtered and exported. Everyone changes their own password from their name in the
 top bar. A session idle for 30 minutes (`SESSION_TIMEOUT_MINUTES`) is signed out.
+
+**Fraud cases.** Confirming fraud (directly or after escalation) opens one fraud case with
+the claim amount as the recommended recovery and a log of enforcement actions drawn from
+the measures SHA's law provides (recovery, suspension, deregistration, referral). Dismissing
+opens none. Cases record recommendations, not real enforcement.
 
 **Google sign-in** needs `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env` and, on the
 OAuth client in Google Cloud Console, every address the app is opened at as an authorised
@@ -162,8 +194,7 @@ detector, cleared and queued per lane, narratives, amount under audit, review pr
 reviewer, top providers and ICD-11 codes among queued claims, and the classifier version and
 thresholds. It downloads as Markdown, and the batch's reports as CSV (`web/audit/summary.py`).
 
-Tests: `.venv/bin/python -m pytest` runs the ML and web suites together (SQLite by default;
-set `DATABASE_URL` to run the web tests on PostgreSQL). Design diagrams for Chapter 4 are in
+Tests: see Testing below. Design diagrams for Chapter 4 are in
 `docs/diagrams/`.
 
 ## Simulated SHA claims platform (`sha_cdp/`)
@@ -274,7 +305,10 @@ again).
 ```
 
 `pyproject.toml` sets the pytest paths and the Django settings, so this runs from the repo
-root. Set `DATABASE_URL` to run the web tests on PostgreSQL instead of SQLite.
+root. The settings load `.env`, so if `.env` sets `DATABASE_URL` to a PostgreSQL that is not
+running, the web tests error; override it for a run:
+`DATABASE_URL=sqlite:////tmp/cg_test.sqlite3 .venv/bin/python -m pytest -q` (312 passed,
+25 Nov 2026). CI runs the suite before every deploy (`.github/workflows/deploy.yml`).
 
 Tests mock anything that would otherwise need a GPU, a real model download, or a live
 external API (HF/OpenAI calls, the ICD-11 container, transformer weight loading) — they
@@ -283,35 +317,31 @@ check *this project's* logic, not the correctness of the libraries it depends on
 against its test case, expected result, and actual result + evidence — the same format
 Chapter 5's Table 5.3 uses, kept live from the start rather than reconstructed later.
 
-## Completion plan
+## Plans and status
 
-`docs/completion_plan.md` is the single reference for what's actually left before this
-implementation is done: what's trained and where (Colab vs. local), where every
-artifact is stored (Drive during development, Hugging Face Hub as the deployment
-hand-off), the deployed dashboard's own storage/persistence decision, an end-to-end
-data-flow diagram, and the remaining Sprint-by-Sprint checklist. Current status is in
-`docs/remaining_work_plan.md` and `docs/platform_plan.md`.
+`docs/sprint_plan.md` is the live checklist ("Remaining implementation" and Sprint 8).
+`docs/completion_plan.md`, `docs/remaining_work_plan.md` and `docs/platform_plan.md` record
+how the work was planned and the decisions behind it; where they disagree with
+`docs/sprint_plan.md` or `tests/test_plan.md`, the latter two are current.
 
 ## Deployment
 
-The Django application uses hosted Neon PostgreSQL and Upstash Redis (see Web application);
-only the web process itself still needs a host (#32, #39). `docker compose up -d --build db
-redis web` runs it in a container (gunicorn). The hosting guide below was written for the
-Streamlit dashboard; its options still apply to the web process.
-
-Free hosting on your own domain: see `docs/hosting_guide.md` for two options (Cloudflare
-Tunnel for a self-hosted demo, or Hugging Face Spaces + a Cloudflare Worker reverse proxy
-for something always-on) — both checked against current provider docs before writing.
-See `docs/completion_plan.md` §3c for a persistence caveat specific to the free-tier
-Spaces option that affects the feedback loop (FR-12/13/14).
+The platform runs on one Oracle Cloud VM (`VM.Standard.E5.Flex`, UK South) at
+https://claimsguard.tech behind Cloudflare: Caddy, the web process (gunicorn), PostgreSQL,
+Redis, the simulated claims platform and the ingest and CPU workers under Docker Compose
+(`deploy/compose.yaml`). **`main` is the deployed branch:** a pull request from `dev` into
+`main` runs the tests, and merging it deploys (`.github/workflows/deploy.yml`). Every step
+is a script you run yourself; the runbook is `deploy/README.md`, and the tested setup is in
+`docs/environment.md`. Operational evidence (failure scenarios, response times, restarts):
+`deploy/scripts/08-ops-check.sh`, TC-053 and TC-054. `docs/hosting_guide.md` records the
+free-hosting options considered earlier.
 
 ## Development process
 
-Scrum for One (single-developer Agile variant, Section 3.3): 2-week sprints tracked via
-GitHub Projects/Issues mapped 1:1 to the Product Backlog. See `implementation_roadmap.md`
-in the documentation repo for full environment setup (Colab, Google Drive folder layout,
-experiment logging) and `docs/ai_use_log.md` for the running AI-assistance disclosure log
-required by the course guide.
+Scrum for One (a single-developer Agile variant): weekly sprints tracked in the GitHub
+project "ClaimGuard: Scrum for One", one issue per backlog item; sprint ends that produced
+a working increment are tagged (`v0.4-data` to `v0.9-frozen`). `docs/ai_use_log.md` is the
+running AI-assistance log the course requires.
 
 ## License
 

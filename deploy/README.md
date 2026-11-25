@@ -1,6 +1,7 @@
 # Deploying ClaimGuard on Oracle Cloud
 
-The whole platform on one Oracle Cloud **Always Free** ARM VM (home region UK South,
+The whole platform on one Oracle Cloud VM (a paid `VM.Standard.E5.Flex` on credit, see below;
+first planned as an Always Free ARM VM; home region UK South,
 `uk-london-1`), served at **https://claimsguard.tech** with Cloudflare in front. You run every
 step yourself; each script is safe to run again, so a new VM is rebuilt by following the same
 steps (keep a copy of `deploy/.env`, the CA key and the origin key, or new ones are made).
