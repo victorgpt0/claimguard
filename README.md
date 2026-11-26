@@ -1,7 +1,6 @@
 # ClaimGuard
 
-LLM-Assisted Anomaly Detection for Post-Payment Fraud Audit: A Case Study of Kenya's
-Social Health Authority
+Fine-Tuned Clinical Language Models for Explainable Post-Payment Fraud Audit: A Case Study of Kenya's Social Health Authority
 
 This repo is the implementation only; the written project documentation (methodology,
 system design, results) is kept outside it.
